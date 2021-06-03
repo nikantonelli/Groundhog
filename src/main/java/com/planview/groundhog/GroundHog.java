@@ -1,14 +1,18 @@
 package com.planview.groundhog;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Objects;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -22,6 +26,7 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.json.JSONObject;
 
 public class GroundHog {
 
@@ -31,6 +36,7 @@ public class GroundHog {
     FileInputStream xlsxfis = null;
     XSSFWorkbook wb = null;
     static Boolean useCron = false;
+    static String statusFile = "";
 
     /**
      * One line sheet that contains the credentials to access the Leankit Server
@@ -54,10 +60,10 @@ public class GroundHog {
                 try {
                     Calendar now = Calendar.getInstance();
                     Calendar then = Calendar.getInstance();
-                    then.add(Calendar.DATE, 1);
-                    then.set(Calendar.HOUR_OF_DAY, 3); // Set to three in the morning
-                    then.set(Calendar.MINUTE, 0);
-                    then.set(Calendar.SECOND, 0);
+                    then.add(Calendar.HOUR, 1);
+                    // then.set(Calendar.HOUR_OF_DAY, 3); // Set to three in the morning
+                    // then.set(Calendar.MINUTE, 0);
+                    // then.set(Calendar.SECOND, 0);
                     Long timeDiff = then.getTimeInMillis() - now.getTimeInMillis();
                     // Do todays activity and then sleep
                     hog.activity(day++);
@@ -70,8 +76,81 @@ public class GroundHog {
             }
         } else {
             // Create a local file to hold the day
+            File statusFs = new File(statusFile);
+            JSONObject settings = new JSONObject();
 
-            // Delete file after the time period has expired
+            try {
+
+                if (!statusFs.exists()) {
+                    statusFs.createNewFile();
+                    setUpStatusFile(statusFs);
+                } // If already exists, then that is OK.
+                BufferedReader fis = new BufferedReader(new FileReader(statusFs));
+                // On the first go at this, we might have a file with nothing in it.
+                // If so, allow to continue as it will get corrected further on.
+                // Json is all on one line in the file, so it makes it easier to parse
+                String jsonLine = fis.readLine();
+                settings = new JSONObject((jsonLine == null) ? "{}" : jsonLine);
+                // Now check we have the correct 'day' field as the file may have already
+                // existed
+                Integer fDay = null;
+                if (settings.has("day")) {
+                    fDay = settings.getInt("day");
+                    if ((fDay == null) || (fDay < 0) || (fDay >= hog.getRefresh())) {
+                        setUpStatusFile(statusFs); // Summat wrong, so try to re-initialise
+                        fis.close();
+                        fis = new BufferedReader(new FileReader(statusFs));
+                        settings = new JSONObject(fis.readLine());
+                        fDay = settings.getInt("day");
+                    }
+
+                } else {
+                    // Once again,file must be corrupted, so try again
+                    setUpStatusFile(statusFs); // Summat wrong, so try to re-initialise
+                    fis.close();
+                    fis = new BufferedReader(new FileReader(statusFs));
+                    settings = new JSONObject(fis.readLine());
+                    fDay = settings.getInt("day");
+                }
+                fis.close();
+                hog.activity(fDay++);
+                // Reset file after the time period has expired
+                if (fDay > hog.getRefresh()) {
+                    // We need to reset the day to zero
+                    setUpStatusFile(statusFs);
+                } else {
+                    settings.put("day", fDay);
+                    FileWriter fos = new FileWriter(statusFs);
+                    settings.write(fos);
+                    fos.flush();
+                    fos.close();
+                }
+
+            } catch (IOException e) {
+                System.out.println(e.getMessage()); // Any other error, we barf.
+                System.exit(1);
+            }
+
+        }
+    }
+
+    public void updateStatusDay(int day) {
+
+    }
+
+    public static void setUpStatusFile(File statusFs) {
+        // Newly created, so add the default settings in
+
+        JSONObject settings = new JSONObject();
+        try {
+            FileWriter fos = new FileWriter(statusFs);
+            settings.put("day", 0);
+            settings.write(fos);
+            fos.flush();
+            fos.close();
+        } catch (IOException e) {
+            System.out.println(e.getMessage());
+            System.exit(1);
         }
     }
 
@@ -83,6 +162,9 @@ public class GroundHog {
         Option cronIt = new Option("c", "cron", false, "Program is called by cron job");
         cronIt.setRequired(false);
         opts.addOption(cronIt);
+        Option statusFn = new Option("s", "status", true, "Status file used when called by cron job");
+        statusFn.setRequired(false);
+        opts.addOption(statusFn);
 
         CommandLineParser p = new DefaultParser();
         HelpFormatter hf = new HelpFormatter();
@@ -97,6 +179,9 @@ public class GroundHog {
 
         xlsxfn = cl.getOptionValue("filename");
         useCron = cl.hasOption("cron");
+        if (cl.hasOption("status")) {
+            statusFile = cl.getOptionValue("status");
+        }
     }
 
     /**
@@ -214,9 +299,8 @@ public class GroundHog {
                                 default:
                                     break;
                             }
-                        }
-                        else {
-                            p[i].set( creds, (p[i].getType().equals(String.class))? "": 0.0);
+                        } else {
+                            p[i].set(creds, (p[i].getType().equals(String.class)) ? "" : 0.0);
                         }
 
                     } catch (IllegalArgumentException | IllegalAccessException e) {
@@ -245,7 +329,7 @@ public class GroundHog {
             day = 0;
             reset();
         }
-        
+
     }
 
     private void reset() {

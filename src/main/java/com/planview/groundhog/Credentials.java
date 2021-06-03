@@ -1,5 +1,7 @@
 package com.planview.groundhog;
 
+import java.util.Base64;
+
 //All fieldnames must be lowercase alphabetical
 public class Credentials {
     public String url;  //Must be first in this object.
@@ -7,4 +9,10 @@ public class Credentials {
     public String password;
     public String apikey;
     public Double cyclelength;  //Excel numeric fields are doubles
+
+    public String hash() {
+        return Base64.getEncoder().encodeToString(
+            (url+username+password+apikey+cyclelength.toString()).getBytes()
+            );
+    }
 }
