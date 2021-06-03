@@ -3,7 +3,7 @@ package com.planview.groundhog;
 import java.util.Base64;
 
 //All fieldnames must be lowercase alphabetical
-public class Credentials {
+public class Configuration {
     public String url;  //Must be first in this object.
     public String username;
     public String password;

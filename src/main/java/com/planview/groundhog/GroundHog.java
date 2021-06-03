@@ -12,7 +12,6 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.Objects;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -26,12 +25,13 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.xmlbeans.impl.tool.XSTCTester.TestCase;
 import org.json.JSONObject;
 
 public class GroundHog {
 
     Integer refreshPeriod = 14; // Number of days to run for by default
-    Credentials creds = new Credentials();
+    Configuration creds = new Configuration();
     String xlsxfn = "";
     FileInputStream xlsxfis = null;
     XSSFWorkbook wb = null;
@@ -44,6 +44,18 @@ public class GroundHog {
      * necessarily have data in all of them - see getConfig()
      */
     XSSFSheet configSht = null;
+    /**
+     * Lines in this sheet refer to changes to make per day
+     */
+    XSSFSheet changesSht = null;
+
+    /**
+     * Sheets that contain the artifacts that are going to be changed.
+     * They can be organised into logical pages of stuff, or all in the
+     * same sheet. I did it this way, so that you can keep a sheet for
+     * each team and separate ones for portfolio changes.
+     */
+    ArrayList<XSSFSheet> teamShts = null;
 
     public static void main(String[] args) {
 
@@ -209,7 +221,7 @@ public class GroundHog {
 
         configSht = wb.getSheet("Config");
         // This is a common sheet listing all the progression changes for all boards
-        XSSFSheet changesSht = wb.getSheet("Changes");
+        changesSht = wb.getSheet("Changes");
 
         Integer shtCount = wb.getNumberOfSheets();
         if ((shtCount < 3) || (configSht == null) || (changesSht == null)) {
@@ -219,14 +231,14 @@ public class GroundHog {
         }
 
         // Grab the rest of the sheets that describe boards
-        ArrayList<XSSFSheet> shtArray = new ArrayList<XSSFSheet>();
+        teamShts = new ArrayList<XSSFSheet>();
         Iterator<Sheet> si = wb.iterator();
 
         // Then all the level info comes next
         while (si.hasNext()) {
             XSSFSheet n = (XSSFSheet) si.next();
             if (!((n.getSheetName().equals("Config")) || (n.getSheetName().equals("Changes")))) {
-                shtArray.add(n);
+                teamShts.add(n);
             }
 
         }
@@ -241,7 +253,7 @@ public class GroundHog {
      */
     private void getConfig() {
         // Make the contents of the file lower case before comparing with these.
-        Field[] p = (new Credentials()).getClass().getDeclaredFields();
+        Field[] p = (new Configuration()).getClass().getDeclaredFields();
 
         ArrayList<String> cols = new ArrayList<String>();
         for (int i = 0; i < p.length; i++) {
@@ -273,7 +285,7 @@ public class GroundHog {
         // row with data in the 'url' cell
         while (ri.hasNext()) {
             Row drRow = ri.next();
-            String cv = drRow.getCell(Integer.parseInt(hm.get(cols.get(0)).toString())).getStringCellValue();
+            String cv = drRow.getCell((int)(hm.get(cols.get(0)))).getStringCellValue();
             if (cv != null) {
 
                 for (int i = 0; i < cols.size(); i++) {
@@ -323,17 +335,100 @@ public class GroundHog {
         return;
     }
 
-    private void activity(Integer day) {
-        // Check if beyond the time limit, if not check for things to do
-        if (day > refreshPeriod) {
-            day = 0;
-            reset();
+    private Integer findColumnFromName(Row firstRow, String name){
+        Iterator<Cell> frtc = firstRow.iterator();
+        //First, find the column that the "Day Delta" info is in
+        int dayCol = -1;
+        int td = 0;
+        while (frtc.hasNext()){
+            Cell tc = frtc.next();
+            if (!tc.getStringCellValue().equals(name)){
+                td++;
+            } else {
+                dayCol = td;
+                break;
+            }
         }
+        if (dayCol < 0) {
+            System.out.println("Could not locate column "+name+ " in Changes sheet");
+            System.exit(1);
+        }
+        return dayCol;
+    }
+
+    private void activity(Integer day) {
+        //Find all the change records for today
+        Iterator<Row> row = changesSht.iterator();
+        ArrayList<Row> todaysChanges = new ArrayList<Row>();
+        Row firstRow = row.next(); //Get the header row
+
+        Integer dayCol = findColumnFromName(firstRow, "Day Delta");
+        Integer itemShtCol = findColumnFromName(firstRow, "Item Sheet");
+        Integer rowCol = findColumnFromName(firstRow, "Item Row");
+        Integer actionCol = findColumnFromName(firstRow, "Action");
+        Integer fieldCol = findColumnFromName(firstRow, "Field");
+        Integer valueCol = findColumnFromName(firstRow, "Final Value");
+
+        //Nw add the rows of today to an array
+        while (row.hasNext()){
+            Row tr = row.next();
+            if (tr.getCell(dayCol).getNumericCellValue() == day){
+                todaysChanges.add(tr);
+            }
+        }
+
+        //Now scan through the changes doing the actions
+        Iterator<Row> cItor = todaysChanges.iterator();
+        Row item = null;
+        while (cItor.hasNext()){
+            Row change = cItor.next();
+            //Get the item that this change refers to
+            XSSFSheet iSht = findSheet(change.getCell(itemShtCol).getStringCellValue());
+            Row iFirstRow =  iSht.getRow(0);
+            Integer idCol = findColumnFromName(iFirstRow, "ID");
+            Integer titleCol = findColumnFromName(iFirstRow, "Title");
+            item = iSht.getRow((int)(change.getCell(rowCol).getNumericCellValue()));
+
+            //If unset, it has a null value for the Leankit ID
+            if ( item.getCell(idCol) == null) {
+                //Check if this is a 'create' operation. If not, ignore and continue past.
+                if ( !change.getCell(actionCol).getStringCellValue().equals("Create")){
+                    System.out.printf("Ignoring action %s on item %s\n", change.getCell(actionCol).getStringCellValue(),item.getCell(titleCol).getStringCellValue() );
+                    break;  //Break out and try next change
+                }
+            }
+            else {
+                //Check if this is a 'create' operation. If it is, ignore and continue past.
+                if ( change.getCell(actionCol).getStringCellValue().equals("Create")){
+                    System.out.printf("Ignoring action %s on item %s\n", change.getCell(actionCol).getStringCellValue(),item.getCell(titleCol).getStringCellValue() );
+                    break;  //Break out and try next change
+                }
+
+            }
+            System.out.printf("Committing to change %s on item %s\n", change.getCell(actionCol).getStringCellValue(),item.getCell(titleCol).getStringCellValue() );
+            // doAction(
+            //     change,
+            //     item
+            // );
+        }
+        
 
     }
 
-    private void reset() {
-        // Clear out all
+    private String doAction(Row op, Row id ){
+        System.out.println(op.toString());
+        System.out.println(id.toString());
+        return null;
+    }
+    private XSSFSheet findSheet(String name) {
+        Iterator<XSSFSheet> s = teamShts.iterator();
+        while (s.hasNext()) {
+            XSSFSheet xs = s.next();
+            if (xs.getSheetName().equals(name)){
+                return xs;
+            }
+        }
+        return null;
     }
 
     private Integer getRefresh() {
