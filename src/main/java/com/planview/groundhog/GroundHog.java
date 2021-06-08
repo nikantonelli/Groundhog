@@ -13,6 +13,9 @@ import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Iterator;
 
+import com.planview.groundhog.Leankit.Card;
+import com.planview.groundhog.Leankit.LeanKitAccess;
+
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -25,7 +28,6 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-import org.apache.xmlbeans.impl.tool.XSTCTester.TestCase;
 import org.json.JSONObject;
 
 public class GroundHog {
@@ -37,6 +39,8 @@ public class GroundHog {
     XSSFWorkbook wb = null;
     static Boolean useCron = false;
     static String statusFile = "";
+    static String moveLane = null;
+    static Boolean deleteItems = false;
 
     /**
      * One line sheet that contains the credentials to access the Leankit Server
@@ -50,10 +54,10 @@ public class GroundHog {
     XSSFSheet changesSht = null;
 
     /**
-     * Sheets that contain the artifacts that are going to be changed.
-     * They can be organised into logical pages of stuff, or all in the
-     * same sheet. I did it this way, so that you can keep a sheet for
-     * each team and separate ones for portfolio changes.
+     * Sheets that contain the artifacts that are going to be changed. They can be
+     * organised into logical pages of stuff, or all in the same sheet. I did it
+     * this way, so that you can keep a sheet for each team and separate ones for
+     * portfolio changes.
      */
     ArrayList<XSSFSheet> teamShts = null;
 
@@ -177,6 +181,13 @@ public class GroundHog {
         Option statusFn = new Option("s", "status", true, "Status file used when called by cron job");
         statusFn.setRequired(false);
         opts.addOption(statusFn);
+        Option deleteCycle = new Option("d", "delete", false, "Delete all artifacts on end of cycle");
+        deleteCycle.setRequired(false);
+        opts.addOption(deleteCycle);
+
+        Option moveCycle = new Option("m", "move", true, "Move all artifacts on end of cycle to this lane");
+        moveCycle.setRequired(false);
+        opts.addOption(moveCycle);
 
         CommandLineParser p = new DefaultParser();
         HelpFormatter hf = new HelpFormatter();
@@ -194,6 +205,13 @@ public class GroundHog {
         if (cl.hasOption("status")) {
             statusFile = cl.getOptionValue("status");
         }
+
+        // Move items to a lane and then delete them if needed - or just delete.
+        if (cl.hasOption("move")) {
+            moveLane = cl.getOptionValue("move");
+        }
+        deleteItems = cl.hasOption("delete");
+
     }
 
     /**
@@ -285,7 +303,7 @@ public class GroundHog {
         // row with data in the 'url' cell
         while (ri.hasNext()) {
             Row drRow = ri.next();
-            String cv = drRow.getCell((int)(hm.get(cols.get(0)))).getStringCellValue();
+            String cv = drRow.getCell((int) (hm.get(cols.get(0)))).getStringCellValue();
             if (cv != null) {
 
                 for (int i = 0; i < cols.size(); i++) {
@@ -335,96 +353,161 @@ public class GroundHog {
         return;
     }
 
-    private Integer findColumnFromName(Row firstRow, String name){
+    private Integer findColumnFromName(Row firstRow, String name) {
         Iterator<Cell> frtc = firstRow.iterator();
-        //First, find the column that the "Day Delta" info is in
+        // First, find the column that the "Day Delta" info is in
         int dayCol = -1;
         int td = 0;
-        while (frtc.hasNext()){
+        while (frtc.hasNext()) {
             Cell tc = frtc.next();
-            if (!tc.getStringCellValue().equals(name)){
+            if (!tc.getStringCellValue().equals(name)) {
                 td++;
             } else {
                 dayCol = td;
                 break;
             }
         }
-        if (dayCol < 0) {
-            System.out.println("Could not locate column "+name+ " in Changes sheet");
-            System.exit(1);
-        }
         return dayCol;
     }
 
+    Integer dayCol = null;
+    Integer itemShtCol = null;
+    Integer rowCol = null;
+    Integer actionCol = null;
+    Integer fieldCol = null;
+    Integer valueCol = null;
+
+    Integer findColumnFromSheet(XSSFSheet sht, String name) {
+        Iterator<Row> row = sht.iterator();
+        Row firstRow = row.next(); // Get the header row
+        Integer col = findColumnFromName(firstRow, name);
+        if (col < 0) {
+            System.out.printf("Could not locate column %s in sheet %s", name, sht.getSheetName());
+        }
+        return col;
+    }
+
     private void activity(Integer day) {
-        //Find all the change records for today
+        // Find all the change records for today
         Iterator<Row> row = changesSht.iterator();
         ArrayList<Row> todaysChanges = new ArrayList<Row>();
-        Row firstRow = row.next(); //Get the header row
 
-        Integer dayCol = findColumnFromName(firstRow, "Day Delta");
-        Integer itemShtCol = findColumnFromName(firstRow, "Item Sheet");
-        Integer rowCol = findColumnFromName(firstRow, "Item Row");
-        Integer actionCol = findColumnFromName(firstRow, "Action");
-        Integer fieldCol = findColumnFromName(firstRow, "Field");
-        Integer valueCol = findColumnFromName(firstRow, "Final Value");
+        dayCol = findColumnFromSheet(changesSht, "Day Delta");
+        itemShtCol = findColumnFromSheet(changesSht, "Item Sheet");
+        rowCol = findColumnFromSheet(changesSht, "Item Row");
+        actionCol = findColumnFromSheet(changesSht, "Action");
+        fieldCol = findColumnFromSheet(changesSht, "Field");
+        valueCol = findColumnFromSheet(changesSht, "Final Value");
 
-        //Nw add the rows of today to an array
-        while (row.hasNext()){
+        // Nw add the rows of today to an array
+        row.next(); // Skip first row with headers
+        while (row.hasNext()) {
             Row tr = row.next();
-            if (tr.getCell(dayCol).getNumericCellValue() == day){
+            if (tr.getCell(dayCol).getNumericCellValue() == day) {
                 todaysChanges.add(tr);
             }
         }
 
-        //Now scan through the changes doing the actions
+        if (todaysChanges.size() == 0) {
+            System.out.printf("No actions to take on day %d", day);
+            return;
+        }
+
+        // Now scan through the changes doing the actions
         Iterator<Row> cItor = todaysChanges.iterator();
         Row item = null;
-        while (cItor.hasNext()){
+        while (cItor.hasNext()) {
             Row change = cItor.next();
-            //Get the item that this change refers to
+            // Get the item that this change refers to
             XSSFSheet iSht = findSheet(change.getCell(itemShtCol).getStringCellValue());
-            Row iFirstRow =  iSht.getRow(0);
-            Integer idCol = findColumnFromName(iFirstRow, "ID");
-            Integer titleCol = findColumnFromName(iFirstRow, "Title");
-            item = iSht.getRow((int)(change.getCell(rowCol).getNumericCellValue()));
+            Integer idCol = findColumnFromSheet(iSht, "ID");
+            Integer titleCol = findColumnFromSheet(iSht, "Title");
+            item = iSht.getRow((int) (change.getCell(rowCol).getNumericCellValue()));
 
-            //If unset, it has a null value for the Leankit ID
-            if ( item.getCell(idCol) == null) {
-                //Check if this is a 'create' operation. If not, ignore and continue past.
-                if ( !change.getCell(actionCol).getStringCellValue().equals("Create")){
-                    System.out.printf("Ignoring action %s on item %s\n", change.getCell(actionCol).getStringCellValue(),item.getCell(titleCol).getStringCellValue() );
-                    break;  //Break out and try next change
+            // If unset, it has a null value for the Leankit ID
+            if (item.getCell(idCol) == null) {
+                // Check if this is a 'create' operation. If not, ignore and continue past.
+                if (!change.getCell(actionCol).getStringCellValue().equals("Create")) {
+                    System.out.printf("Ignoring action %s on item %s (no ID present in row %d)\n",
+                            change.getCell(actionCol).getStringCellValue(), item.getCell(titleCol).getStringCellValue(),
+                            item.getRowNum());
+                    break; // Break out and try next change
                 }
-            }
-            else {
-                //Check if this is a 'create' operation. If it is, ignore and continue past.
-                if ( change.getCell(actionCol).getStringCellValue().equals("Create")){
-                    System.out.printf("Ignoring action %s on item %s\n", change.getCell(actionCol).getStringCellValue(),item.getCell(titleCol).getStringCellValue() );
-                    break;  //Break out and try next change
+            } else {
+                // Check if this is a 'create' operation. If it is, ignore and continue past.
+                if (change.getCell(actionCol).getStringCellValue().equals("Create")) {
+                    System.out.printf("Ignoring action %s on item %s (attempting create on existing ID in row %d)\n",
+                            change.getCell(actionCol).getStringCellValue(), item.getCell(titleCol).getStringCellValue(),
+                            item.getRowNum());
+                    break; // Break out and try next change
                 }
 
             }
-            System.out.printf("Committing to change %s on item %s\n", change.getCell(actionCol).getStringCellValue(),item.getCell(titleCol).getStringCellValue() );
-            // doAction(
-            //     change,
-            //     item
-            // );
+            System.out.printf("Committing to change %s on item %s\n", change.getCell(actionCol).getStringCellValue(),
+                    item.getCell(titleCol).getStringCellValue());
+            doAction(change, item);
         }
-        
 
     }
 
-    private String doAction(Row op, Row id ){
-        System.out.println(op.toString());
-        System.out.println(id.toString());
+    private String doAction(Row change, Row item) {
+        // We need to find the ID of the board that this is targetting for a card
+        // creation
+        LeanKitAccess lka = new LeanKitAccess(creds);
+        XSSFSheet iSht = findSheet(change.getCell(itemShtCol).getStringCellValue());
+        String boardNumber = lka
+                .fetchBoardId(item.getCell(findColumnFromSheet(iSht, "Board Name")).getStringCellValue());
+
+        /**
+         * We need to either 'create' if ID == null && action == 'Create' or update if
+         * ID != null && action == 'Modify'
+         * 
+         */
+        if (change.getCell(actionCol).getStringCellValue().equals("Create")) {
+            /**
+             * We need to get the header row for this sheet and work out which columns the
+             * fields are in. It is possible that fields could be different between sheets,
+             * so we have to do this every 'change'
+             */
+
+            Iterator<Row> iRow = iSht.iterator();
+            Row iFirst = iRow.next();
+            /**
+             * Now iterate across the cells finding out which fields need to be set
+             */
+            JSONObject fieldLst = new JSONObject();
+            Iterator<Cell> cItor = iFirst.iterator();
+            while (cItor.hasNext()) {
+                Cell cl = cItor.next();
+                String nm = cl.getStringCellValue();
+                if ((nm.toLowerCase().equals("id") || (nm.toLowerCase().equals("board name")))) {
+                    continue;
+                }
+                fieldLst.put(nm, cl.getColumnIndex());
+            }
+
+            Card card = createCard(lka, boardNumber, fieldLst);    //Change from human readable to API fields on the way
+
+        }
         return null;
     }
+
+    public Card createCard( LeanKitAccess lka, String bNum, JSONObject fieldLst){
+
+        //Get available types!!
+
+        
+        //First create an empty card and get back the full structure as a string
+        //Then we need to check what sort of stuff we have back and can we update the fields given.
+        String newCard = lka.createCard(bNum, new JSONObject());
+        return null;
+    }
+
     private XSSFSheet findSheet(String name) {
         Iterator<XSSFSheet> s = teamShts.iterator();
         while (s.hasNext()) {
             XSSFSheet xs = s.next();
-            if (xs.getSheetName().equals(name)){
+            if (xs.getSheetName().equals(name)) {
                 return xs;
             }
         }
