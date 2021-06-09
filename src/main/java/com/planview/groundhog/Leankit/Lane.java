@@ -1,19 +1,13 @@
 package com.planview.groundhog.Leankit;
 
 public class Lane {
-    public class Create {
-    int cardLimit;
-    String description;
-    String id;
-    int index;
-    String laneClassType;
-    String laneType;
-    String orientation;
-    String title;
-    String taskBoard;
-    }
-
-    public class Read extends Create {
-        Boolean active, isCollapsed, isDefaultDropLane, isConnectionDoneLane;
-    }
+    public int cardLimit;
+    public String description;
+    public String id;
+    public int index;
+    public String laneClassType;
+    public String laneType;
+    public String orientation;
+    public String title;
+    public String taskBoard;
 }

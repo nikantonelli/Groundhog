@@ -1,7 +1,7 @@
 package com.planview.groundhog.Leankit;
 
 public class CustomIcon {
-    String  id,
+    public String  id,
             title,
             cardColor,
             iconColor,

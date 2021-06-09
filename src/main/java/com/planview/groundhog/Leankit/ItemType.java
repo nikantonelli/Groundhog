@@ -1,5 +1,5 @@
 package com.planview.groundhog.Leankit;
 
 public class ItemType {
-    String id,title,cardColor;
+    public String id,title,cardColor;
 }

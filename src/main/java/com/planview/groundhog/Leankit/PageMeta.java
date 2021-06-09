@@ -1,7 +1,7 @@
 package com.planview.groundhog.Leankit;
 
 public class PageMeta {
-    int totalRecords,
+    public int totalRecords,
         offset,
         limit,
         startRow,

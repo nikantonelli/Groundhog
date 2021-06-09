@@ -2,7 +2,7 @@ package com.planview.groundhog.Leankit;
 
 import java.util.Date;
 
-public class BoardLongRead {
+public class BoardLongRead extends BoardCopy {
     public String id;
     public String title, description, boardRole, version, subscriptionId, sharedBoardRole, effectiveBoardRole;
     public int boardRoleId, currentExternalCardId, cardColorField;

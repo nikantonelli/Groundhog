@@ -8,12 +8,16 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 
-import com.planview.groundhog.Leankit.Card;
+import com.planview.groundhog.Leankit.CardLongRead;
+import com.planview.groundhog.Leankit.CardType;
+import com.planview.groundhog.Leankit.Id;
 import com.planview.groundhog.Leankit.LeanKitAccess;
 
 import org.apache.commons.cli.CommandLine;
@@ -24,6 +28,8 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
@@ -33,7 +39,7 @@ import org.json.JSONObject;
 public class GroundHog {
 
     Integer refreshPeriod = 14; // Number of days to run for by default
-    Configuration creds = new Configuration();
+    Configuration config = new Configuration();
     String xlsxfn = "";
     FileInputStream xlsxfis = null;
     XSSFWorkbook wb = null;
@@ -317,12 +323,12 @@ public class GroundHog {
                         if (cell != null) {
                             switch (cell.getCellType()) {
                                 case STRING:
-                                    p[i].set(creds,
+                                    p[i].set(config,
                                             (cell != null ? drRow.getCell(Integer.parseInt(val)).getStringCellValue()
                                                     : ""));
                                     break;
                                 case NUMERIC:
-                                    p[i].set(creds,
+                                    p[i].set(config,
                                             (cell != null ? drRow.getCell(Integer.parseInt(val)).getNumericCellValue()
                                                     : ""));
                                     break;
@@ -330,7 +336,7 @@ public class GroundHog {
                                     break;
                             }
                         } else {
-                            p[i].set(creds, (p[i].getType().equals(String.class)) ? "" : 0.0);
+                            p[i].set(config, (p[i].getType().equals(String.class)) ? "" : 0.0);
                         }
 
                     } catch (IllegalArgumentException | IllegalAccessException e) {
@@ -347,8 +353,8 @@ public class GroundHog {
         // Creds are now found and set. If not, you're buggered.
         // We can opt to use username/password or apikey.
 
-        if ((creds.cyclelength != null) && (creds.cyclelength != 0.0)) {
-            refreshPeriod = creds.cyclelength.intValue();
+        if ((config.cyclelength != null) && (config.cyclelength != 0.0)) {
+            refreshPeriod = config.cyclelength.intValue();
         }
         return;
     }
@@ -399,6 +405,12 @@ public class GroundHog {
         fieldCol = findColumnFromSheet(changesSht, "Field");
         valueCol = findColumnFromSheet(changesSht, "Final Value");
 
+        if ((dayCol == null) || (itemShtCol == null) || (rowCol == null) || (actionCol == null) || (fieldCol == null)
+                || (valueCol == null)) {
+            System.out.printf(
+                    "Could nto find all required columns in %s sheet: \"Day Delta\", \"Item Sheet\", \"Item Row\", \"Action\", \"Field\", \"Final Value\"");
+            System.exit(1);
+        }
         // Nw add the rows of today to an array
         row.next(); // Skip first row with headers
         while (row.hasNext()) {
@@ -421,7 +433,7 @@ public class GroundHog {
             // Get the item that this change refers to
             XSSFSheet iSht = findSheet(change.getCell(itemShtCol).getStringCellValue());
             Integer idCol = findColumnFromSheet(iSht, "ID");
-            Integer titleCol = findColumnFromSheet(iSht, "Title");
+            Integer titleCol = findColumnFromSheet(iSht, "title");
             item = iSht.getRow((int) (change.getCell(rowCol).getNumericCellValue()));
 
             // If unset, it has a null value for the Leankit ID
@@ -453,7 +465,7 @@ public class GroundHog {
     private String doAction(Row change, Row item) {
         // We need to find the ID of the board that this is targetting for a card
         // creation
-        LeanKitAccess lka = new LeanKitAccess(creds);
+        LeanKitAccess lka = new LeanKitAccess(config);
         XSSFSheet iSht = findSheet(change.getCell(itemShtCol).getStringCellValue());
         String boardNumber = lka
                 .fetchBoardId(item.getCell(findColumnFromSheet(iSht, "Board Name")).getStringCellValue());
@@ -486,21 +498,106 @@ public class GroundHog {
                 fieldLst.put(nm, cl.getColumnIndex());
             }
 
-            Card card = createCard(lka, boardNumber, fieldLst);    //Change from human readable to API fields on the way
+            // Now 'translate' the spreadsheet name:col pairs to fieldName:value pairs
+            Iterator<String> keys = fieldLst.keys();
+            JSONObject flds = new JSONObject();
+
+            while (keys.hasNext()) {
+                String key = keys.next();
+                if (item.getCell(fieldLst.getInt(key)) != null) {
+                    switch (key) {
+                        case "Type": {
+                            //Convert Type string to typeId
+                        }
+                        default: {
+
+                            if (item.getCell(fieldLst.getInt(key)).getCellType() == CellType.STRING) { 
+                                flds.put(key, item.getCell(fieldLst.getInt(key)).getStringCellValue()); 
+                            } else {
+                                if (DateUtil.isCellDateFormatted(item.getCell(fieldLst.getInt(key)))){
+                                    SimpleDateFormat dtf = new SimpleDateFormat("yyyy-MM-dd");
+                                    Date date = item.getCell(fieldLst.getInt(key)).getDateCellValue();
+                                    flds.put(key, dtf.format(date).toString());
+                                } else {
+                                    flds.put(key, (int) item.getCell(fieldLst.getInt(key)).getNumericCellValue());
+                                }
+                            }
+                        }
+
+                    }
+                }
+            }
+
+            Id card = createCard(lka, boardNumber, flds); // Change from human readable to API fields on
+                                                                        // the way
+            if (card == null) {
+                System.out.printf("Could not create card on board %s with details: %s", boardNumber,
+                        fieldLst.toString());
+                System.exit(1);
+            }
+            return card.id;
 
         }
         return null;
     }
 
-    public Card createCard( LeanKitAccess lka, String bNum, JSONObject fieldLst){
+    public Id createCard(LeanKitAccess lka, String bNum, JSONObject fieldLst) {
 
-        //Get available types!!
+        // Get available types so we can convert type string to typeid string
+        ArrayList<CardType> cTypes = lka.fetchCardTypes(bNum);
 
-        
-        //First create an empty card and get back the full structure as a string
-        //Then we need to check what sort of stuff we have back and can we update the fields given.
-        String newCard = lka.createCard(bNum, new JSONObject());
-        return null;
+        // First create an empty card and get back the full structure as a string
+
+        CardLongRead newCard = lka.createCard(bNum, new JSONObject());
+
+        // If for any reason the network fails, we get a null back.
+        if (newCard == null) {
+            return null;
+        }
+
+        JSONObject finalCard = new JSONObject();
+        if (fieldLst.has("Type")) {
+            // Find type in cTypes and add new. If not present, then 'create' will default
+            for (int i = 0; i < cTypes.size(); i++) {
+                if (cTypes.get(i).name.equals(fieldLst.get("Type"))) {
+                    finalCard.put("typeId", cTypes.get(i).id);
+                }
+            }
+
+        }
+        // Then we need to check what sort of stuff we have back and can we update the
+        // fields given.
+        Iterator<String> fields = fieldLst.keys();
+        while (fields.hasNext()) {
+            String fldName = fields.next();
+            switch (fldName.toLowerCase()) {
+                case "id":
+                case "board name":
+                case "type":
+                    break;
+                default:
+                    //Make Sure field names from speadsheet are part of the Card model.
+                    Field[] fld = CardLongRead.class.getFields();
+                    Boolean fieldFound = false;
+                    for (int i =0 ; i < fld.length; i++) {
+                        if (fld[i].getName().equals(fldName)) {
+                            fieldFound = true;
+                            break;
+                        }
+                    }
+                    if (fieldFound) {
+                        finalCard.put(fldName, fieldLst.get(fldName));
+                    }
+                    else {
+                        System.out.printf("Incorrect field name \"%s\" provided for update on card %s",fldName, newCard.id);
+                    }
+                    break;
+            }
+
+        }
+        Id id = new Id();
+        id.id = lka.updateCardFromId(newCard.id, finalCard).id;
+        return id;
     }
 
     private XSSFSheet findSheet(String name) {

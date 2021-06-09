@@ -1,5 +1,5 @@
 package com.planview.groundhog.Leankit;
 
 public class ParentCard {
-    String cardId, boardId;
+    public String cardId, boardId;
 }

@@ -1,6 +1,6 @@
 package com.planview.groundhog.Leankit;
 
 public class ExternalLink {
-    String label;
-    String url;
+    public String label;
+    public String url;
 }

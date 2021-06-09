@@ -3,7 +3,7 @@ package com.planview.groundhog.Leankit;
 import java.util.Date;
 
 public class BlockedStatus {
-    boolean isBlocked;
-    String reason;
-    Date date;
+    public Boolean isBlocked;
+    public String reason;
+    public Date date;
 }
