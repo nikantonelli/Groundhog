@@ -9,6 +9,7 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -68,7 +69,7 @@ public class GroundHog {
      */
     ArrayList<XSSFSheet> teamShts = null;
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws IOException, InterruptedException {
 
         GroundHog hog = new GroundHog();
 
@@ -289,7 +290,7 @@ public class GroundHog {
 
         // Assume that the titles are the first row
         Iterator<Row> ri = configSht.iterator();
-        if (! ri.hasNext()){
+        if (!ri.hasNext()) {
             System.out.println("Did not detect any header info on Config sheet (first row!)");
             System.exit(1);
         }
@@ -310,8 +311,9 @@ public class GroundHog {
             System.exit(1);
         }
 
-        if (! ri.hasNext()){
-            System.out.println("Did not detect any field info on Config sheet (first cell must be non-blank, e.g. url to a real host)");
+        if (!ri.hasNext()) {
+            System.out.println(
+                    "Did not detect any field info on Config sheet (first cell must be non-blank, e.g. url to a real host)");
             System.exit(1);
         }
         // Now we know which columns contain the data, scan down the sheet looking for a
@@ -361,12 +363,12 @@ public class GroundHog {
 
         // Creds are now found and set. If not, you're buggered.
         /**
-         *  We can opt to use username/password or apikey.
-         * Unfortunately, we have to hard code the field names in here, even though I was trying
-         * to use the fields from the Configuration class.
-         **/ 
+         * We can opt to use username/password or apikey. Unfortunately, we have to hard
+         * code the field names in here, even though I was trying to use the fields from
+         * the Configuration class.
+         **/
 
-        if ((config.apikey == null) && ((config.username == null) || (config.password == null))){
+        if ((config.apikey == null) && ((config.username == null) || (config.password == null))) {
             System.out.println("Did not detect enough user info: apikey or username/password pair");
             System.exit(1);
         }
@@ -407,19 +409,17 @@ public class GroundHog {
     Integer findColumnFromSheet(XSSFSheet sht, String name) {
         Iterator<Row> row = sht.iterator();
         if (!row.hasNext()) {
-            System.out.printf("Could not locate column %s in sheet %s - no header row found", name, sht.getSheetName());
-            System.exit(1);
+            return null;
         }
         Row firstRow = row.next(); // Get the header row
         Integer col = findColumnFromName(firstRow, name);
         if (col < 0) {
-            System.out.printf("Could not locate column %s in sheet %s", name, sht.getSheetName());
-            System.exit(1);
+            return null;
         }
         return col;
     }
 
-    private void activity(Integer day) throws IOException {
+    private void activity(Integer day) throws IOException, InterruptedException {
         // Find all the change records for today
         Iterator<Row> row = changesSht.iterator();
         ArrayList<Row> todaysChanges = new ArrayList<Row>();
@@ -434,7 +434,8 @@ public class GroundHog {
         if ((dayCol == null) || (itemShtCol == null) || (rowCol == null) || (actionCol == null) || (fieldCol == null)
                 || (valueCol == null)) {
             System.out.printf(
-                    "Could not find all required columns in %s sheet: \"Day Delta\", \"Item Sheet\", \"Item Row\", \"Action\", \"Field\", \"Final Value\"");
+                    "Could not find all required columns in %s sheet: \"Day Delta\", \"Item Sheet\", \"Item Row\", \"Action\", \"Field\", \"Final Value\"",
+                    changesSht.getSheetName());
             System.exit(1);
         }
         // Nw add the rows of today to an array
@@ -454,14 +455,32 @@ public class GroundHog {
         // Now scan through the changes doing the actions
         Iterator<Row> cItor = todaysChanges.iterator();
         Row item = null;
+        Boolean changeMade = false;
         while (cItor.hasNext()) {
             Row change = cItor.next();
             // Get the item that this change refers to
+            // First check the validity of the info
+            if ((change.getCell(itemShtCol) == null) || (change.getCell(rowCol) == null)
+                    || (change.getCell(actionCol) == null)) {
+                System.out.printf("Cannot decode change info in row \"%d\" - skipping\n", change.getRowNum());
+                continue;
+            }
             XSSFSheet iSht = findSheet(change.getCell(itemShtCol).getStringCellValue());
             Integer idCol = findColumnFromSheet(iSht, "ID");
             Integer titleCol = findColumnFromSheet(iSht, "title");
+            Integer boardCol = findColumnFromSheet(iSht, "Board Name");
             item = iSht.getRow((int) (change.getCell(rowCol).getNumericCellValue()));
 
+            if ( (idCol == null) ||(titleCol == null)){
+                System.out.printf("Cannot identify \"ID\" and \"title\" columns needed in sheet \"%s\" - skipping\n", iSht.getSheetName());
+                continue;
+            }
+
+            // Check board name is present for a Create
+            if ((change.getCell(actionCol).getStringCellValue().equals("Create")) && ((boardCol == null) || (item.getCell(boardCol) == null) || (item.getCell(boardCol).getStringCellValue().isEmpty()))){
+                System.out.printf("Cannot identify \"Board Name\" column needed in sheet \"%s\"  for a Create - skipping\n", iSht.getSheetName());
+                continue;
+            }
             // If unset, it has a null value for the Leankit ID
             if (item.getCell(idCol) == null) {
                 // Check if this is a 'create' operation. If not, ignore and continue past.
@@ -474,29 +493,52 @@ public class GroundHog {
             } else {
                 // Check if this is a 'create' operation. If it is, ignore and continue past.
                 if (change.getCell(actionCol).getStringCellValue().equals("Create")) {
-                    System.out.printf("Ignoring action \"%s\" on item \"%s\" (attempting create on existing ID in row: %d)\n",
+                    System.out.printf(
+                            "Ignoring action \"%s\" on item \"%s\" (attempting create on existing ID in row: %d)\n",
                             change.getCell(actionCol).getStringCellValue(), item.getCell(titleCol).getStringCellValue(),
                             item.getRowNum());
                     break; // Break out and try next change
                 }
 
             }
-            System.out.printf("Committing to change \"%s\" on item \"%s\n\"", change.getCell(actionCol).getStringCellValue(),
-                    item.getCell(titleCol).getStringCellValue());
+            System.out.printf("Committing to change \"%s\" on item \"%s\n\"",
+                    change.getCell(actionCol).getStringCellValue(), item.getCell(titleCol).getStringCellValue());
             String id = doAction(change, item);
             if (id != null) {
-                if (wb.getSheet(item.getSheet().getSheetName()).getRow(item.getRowNum()).getCell(idCol) == null) {
-                
-                    wb.getSheet(item.getSheet().getSheetName()).getRow(item.getRowNum()).createCell(idCol);
+                changeMade = true;
+                if (item.getCell(idCol) == null) {
+
+                    item.createCell(idCol);
                 }
-                wb.getSheet(item.getSheet().getSheetName()).getRow(item.getRowNum()).getCell(idCol).setCellValue(id);
+                item.getCell(idCol).setCellValue(id);
             }
         }
+        if (changeMade) {
+            Integer loopCnt = 12;
+            while (true) {
+                try {
+                    FileOutputStream oStr = new FileOutputStream(xlsxfn);
+                    wb.write(oStr);
+                    wb.close();
+                    oStr.close();
+                    return;
+                } catch (IOException e) {
+                    SimpleDateFormat dtf = new SimpleDateFormat("hh-mm");
+                    Calendar now = Calendar.getInstance();
+                    Calendar then = Calendar.getInstance();
+                    then.add(Calendar.HOUR, 1);
+                    Long timeDiff = then.getTimeInMillis() - now.getTimeInMillis();
+                    System.out.printf("File \"%s\" in use. Please close to let this program continue in an hour (%s)", xlsxfn, then.toString());
+                    Thread.sleep(timeDiff);
+                    if (--loopCnt < 0) {
+                        return;
+                    }
+                }
+            }
+        } else {
+            wb.close();
+        }
 
-        FileOutputStream oStr = new FileOutputStream(xlsxfn);
-        wb.write(oStr);
-        wb.close();
-        oStr.close();
     }
 
     private String doAction(Row change, Row item) {
@@ -507,64 +549,62 @@ public class GroundHog {
         String boardNumber = lka
                 .fetchBoardId(item.getCell(findColumnFromSheet(iSht, "Board Name")).getStringCellValue());
 
-       
-            /**
-             * We need to get the header row for this sheet and work out which columns the
-             * fields are in. It is possible that fields could be different between sheets,
-             * so we have to do this every 'change'
-             */
+        /**
+         * We need to get the header row for this sheet and work out which columns the
+         * fields are in. It is possible that fields could be different between sheets,
+         * so we have to do this every 'change'
+         */
 
-            Iterator<Row> iRow = iSht.iterator();
-            Row iFirst = iRow.next();
-            /**
-             * Now iterate across the cells finding out which fields need to be set
-             */
-            JSONObject fieldLst = new JSONObject();
-            Iterator<Cell> cItor = iFirst.iterator();
-            Integer idCol = null;
-            while (cItor.hasNext()) {
-                Cell cl = cItor.next();
-                String nm = cl.getStringCellValue();
-                if (nm.toLowerCase().equals("id")){
-                    idCol = cl.getColumnIndex();
-                    continue;
-                }
-                else if (nm.toLowerCase().equals("board name")) {
-                    continue;
-                }
-                fieldLst.put(nm, cl.getColumnIndex());
+        Iterator<Row> iRow = iSht.iterator();
+        Row iFirst = iRow.next();
+        /**
+         * Now iterate across the cells finding out which fields need to be set
+         */
+        JSONObject fieldLst = new JSONObject();
+        Iterator<Cell> cItor = iFirst.iterator();
+        Integer idCol = null;
+        while (cItor.hasNext()) {
+            Cell cl = cItor.next();
+            String nm = cl.getStringCellValue();
+            if (nm.toLowerCase().equals("id")) {
+                idCol = cl.getColumnIndex();
+                continue;
+            } else if (nm.toLowerCase().equals("board name")) {
+                continue;
             }
+            fieldLst.put(nm, cl.getColumnIndex());
+        }
 
-            // Now 'translate' the spreadsheet name:col pairs to fieldName:value pairs
-            Iterator<String> keys = fieldLst.keys();
-            JSONObject flds = new JSONObject();
+        // Now 'translate' the spreadsheet name:col pairs to fieldName:value pairs
+        Iterator<String> keys = fieldLst.keys();
+        JSONObject flds = new JSONObject();
 
-            while (keys.hasNext()) {
-                String key = keys.next();
-                if (item.getCell(fieldLst.getInt(key)) != null) {
-                    switch (key) {
-                        case "Type": {
-                            // Convert Type string to typeId
-                        }
-                        default: {
+        while (keys.hasNext()) {
+            String key = keys.next();
+            if (item.getCell(fieldLst.getInt(key)) != null) {
+                switch (key) {
+                    case "Type": {
+                        // Convert Type string to typeId
+                    }
+                    default: {
 
-                            if (item.getCell(fieldLst.getInt(key)).getCellType() == CellType.STRING) {
-                                flds.put(key, item.getCell(fieldLst.getInt(key)).getStringCellValue());
+                        if (item.getCell(fieldLst.getInt(key)).getCellType() == CellType.STRING) {
+                            flds.put(key, item.getCell(fieldLst.getInt(key)).getStringCellValue());
+                        } else {
+                            if (DateUtil.isCellDateFormatted(item.getCell(fieldLst.getInt(key)))) {
+                                SimpleDateFormat dtf = new SimpleDateFormat("yyyy-MM-dd");
+                                Date date = item.getCell(fieldLst.getInt(key)).getDateCellValue();
+                                flds.put(key, dtf.format(date).toString());
                             } else {
-                                if (DateUtil.isCellDateFormatted(item.getCell(fieldLst.getInt(key)))) {
-                                    SimpleDateFormat dtf = new SimpleDateFormat("yyyy-MM-dd");
-                                    Date date = item.getCell(fieldLst.getInt(key)).getDateCellValue();
-                                    flds.put(key, dtf.format(date).toString());
-                                } else {
-                                    flds.put(key, (int) item.getCell(fieldLst.getInt(key)).getNumericCellValue());
-                                }
+                                flds.put(key, (int) item.getCell(fieldLst.getInt(key)).getNumericCellValue());
                             }
                         }
-
                     }
+
                 }
             }
- 
+        }
+
         /**
          * We need to either 'create' if ID == null && action == 'Create' or update if
          * ID != null && action == 'Modify'
@@ -581,7 +621,7 @@ public class GroundHog {
             return card.id;
 
         } else if (change.getCell(actionCol).getStringCellValue().equals("Modify")) {
-            //Fetch the ID from the item and then fetch that card
+            // Fetch the ID from the item and then fetch that card
             CardLongRead card = lka.fetchCard(item.getCell(idCol).getStringCellValue());
             Id id = updateCard(lka, boardNumber, card, flds);
             if (id == null) {
@@ -591,7 +631,7 @@ public class GroundHog {
             }
             return id.id;
         }
-        //Unknown option comes here
+        // Unknown option comes here
         return null;
     }
 
