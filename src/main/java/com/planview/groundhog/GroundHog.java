@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -67,7 +68,7 @@ public class GroundHog {
      */
     ArrayList<XSSFSheet> teamShts = null;
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
 
         GroundHog hog = new GroundHog();
 
@@ -284,10 +285,14 @@ public class GroundHog {
             p[i].setAccessible(true); // Set this up for later
             cols.add(p[i].getName().toLowerCase());
         }
-        HashMap<String, Object> hm = new HashMap<>();
+        HashMap<String, Object> fieldMap = new HashMap<>();
 
         // Assume that the titles are the first row
         Iterator<Row> ri = configSht.iterator();
+        if (! ri.hasNext()){
+            System.out.println("Did not detect any header info on Config sheet (first row!)");
+            System.exit(1);
+        }
         Row hdr = ri.next();
         Iterator<Cell> cptr = hdr.cellIterator();
 
@@ -296,27 +301,31 @@ public class GroundHog {
             Integer idx = cell.getColumnIndex();
             String cellName = cell.getStringCellValue().trim().toLowerCase();
             if (cols.contains(cellName)) {
-                hm.put(cellName, idx); // Store the column index of the field
+                fieldMap.put(cellName, idx); // Store the column index of the field
             }
         }
 
-        if (hm.size() != cols.size()) {
+        if (fieldMap.size() != cols.size()) {
             System.out.println("Did not detect correct columns on Config sheet: " + cols.toString());
             System.exit(1);
         }
 
+        if (! ri.hasNext()){
+            System.out.println("Did not detect any field info on Config sheet (first cell must be non-blank, e.g. url to a real host)");
+            System.exit(1);
+        }
         // Now we know which columns contain the data, scan down the sheet looking for a
         // row with data in the 'url' cell
         while (ri.hasNext()) {
             Row drRow = ri.next();
-            String cv = drRow.getCell((int) (hm.get(cols.get(0)))).getStringCellValue();
+            String cv = drRow.getCell((int) (fieldMap.get(cols.get(0)))).getStringCellValue();
             if (cv != null) {
 
                 for (int i = 0; i < cols.size(); i++) {
 
                     try {
                         String idx = cols.get(i);
-                        Object obj = hm.get(idx);
+                        Object obj = fieldMap.get(idx);
                         String val = obj.toString();
                         Cell cell = drRow.getCell(Integer.parseInt(val));
 
@@ -351,9 +360,17 @@ public class GroundHog {
         }
 
         // Creds are now found and set. If not, you're buggered.
-        // We can opt to use username/password or apikey.
+        /**
+         *  We can opt to use username/password or apikey.
+         * Unfortunately, we have to hard code the field names in here, even though I was trying
+         * to use the fields from the Configuration class.
+         **/ 
 
-        if ((config.cyclelength != null) && (config.cyclelength != 0.0)) {
+        if ((config.apikey == null) && ((config.username == null) || (config.password == null))){
+            System.out.println("Did not detect enough user info: apikey or username/password pair");
+            System.exit(1);
+        }
+        if ((config.cyclelength != null) && (config.cyclelength.intValue() != 0)) {
             refreshPeriod = config.cyclelength.intValue();
         }
         return;
@@ -364,6 +381,10 @@ public class GroundHog {
         // First, find the column that the "Day Delta" info is in
         int dayCol = -1;
         int td = 0;
+        if (!frtc.hasNext()) {
+            return dayCol;
+        }
+
         while (frtc.hasNext()) {
             Cell tc = frtc.next();
             if (!tc.getStringCellValue().equals(name)) {
@@ -385,15 +406,20 @@ public class GroundHog {
 
     Integer findColumnFromSheet(XSSFSheet sht, String name) {
         Iterator<Row> row = sht.iterator();
+        if (!row.hasNext()) {
+            System.out.printf("Could not locate column %s in sheet %s - no header row found", name, sht.getSheetName());
+            System.exit(1);
+        }
         Row firstRow = row.next(); // Get the header row
         Integer col = findColumnFromName(firstRow, name);
         if (col < 0) {
             System.out.printf("Could not locate column %s in sheet %s", name, sht.getSheetName());
+            System.exit(1);
         }
         return col;
     }
 
-    private void activity(Integer day) {
+    private void activity(Integer day) throws IOException {
         // Find all the change records for today
         Iterator<Row> row = changesSht.iterator();
         ArrayList<Row> todaysChanges = new ArrayList<Row>();
@@ -408,7 +434,7 @@ public class GroundHog {
         if ((dayCol == null) || (itemShtCol == null) || (rowCol == null) || (actionCol == null) || (fieldCol == null)
                 || (valueCol == null)) {
             System.out.printf(
-                    "Could nto find all required columns in %s sheet: \"Day Delta\", \"Item Sheet\", \"Item Row\", \"Action\", \"Field\", \"Final Value\"");
+                    "Could not find all required columns in %s sheet: \"Day Delta\", \"Item Sheet\", \"Item Row\", \"Action\", \"Field\", \"Final Value\"");
             System.exit(1);
         }
         // Nw add the rows of today to an array
@@ -440,7 +466,7 @@ public class GroundHog {
             if (item.getCell(idCol) == null) {
                 // Check if this is a 'create' operation. If not, ignore and continue past.
                 if (!change.getCell(actionCol).getStringCellValue().equals("Create")) {
-                    System.out.printf("Ignoring action %s on item %s (no ID present in row %d)\n",
+                    System.out.printf("Ignoring action \"%s\" on item \"%s\" (no ID present in row: %d)\n",
                             change.getCell(actionCol).getStringCellValue(), item.getCell(titleCol).getStringCellValue(),
                             item.getRowNum());
                     break; // Break out and try next change
@@ -448,18 +474,29 @@ public class GroundHog {
             } else {
                 // Check if this is a 'create' operation. If it is, ignore and continue past.
                 if (change.getCell(actionCol).getStringCellValue().equals("Create")) {
-                    System.out.printf("Ignoring action %s on item %s (attempting create on existing ID in row %d)\n",
+                    System.out.printf("Ignoring action \"%s\" on item \"%s\" (attempting create on existing ID in row: %d)\n",
                             change.getCell(actionCol).getStringCellValue(), item.getCell(titleCol).getStringCellValue(),
                             item.getRowNum());
                     break; // Break out and try next change
                 }
 
             }
-            System.out.printf("Committing to change %s on item %s\n", change.getCell(actionCol).getStringCellValue(),
+            System.out.printf("Committing to change \"%s\" on item \"%s\n\"", change.getCell(actionCol).getStringCellValue(),
                     item.getCell(titleCol).getStringCellValue());
-            doAction(change, item);
+            String id = doAction(change, item);
+            if (id != null) {
+                if (wb.getSheet(item.getSheet().getSheetName()).getRow(item.getRowNum()).getCell(idCol) == null) {
+                
+                    wb.getSheet(item.getSheet().getSheetName()).getRow(item.getRowNum()).createCell(idCol);
+                }
+                wb.getSheet(item.getSheet().getSheetName()).getRow(item.getRowNum()).getCell(idCol).setCellValue(id);
+            }
         }
 
+        FileOutputStream oStr = new FileOutputStream(xlsxfn);
+        wb.write(oStr);
+        wb.close();
+        oStr.close();
     }
 
     private String doAction(Row change, Row item) {
@@ -470,12 +507,7 @@ public class GroundHog {
         String boardNumber = lka
                 .fetchBoardId(item.getCell(findColumnFromSheet(iSht, "Board Name")).getStringCellValue());
 
-        /**
-         * We need to either 'create' if ID == null && action == 'Create' or update if
-         * ID != null && action == 'Modify'
-         * 
-         */
-        if (change.getCell(actionCol).getStringCellValue().equals("Create")) {
+       
             /**
              * We need to get the header row for this sheet and work out which columns the
              * fields are in. It is possible that fields could be different between sheets,
@@ -489,10 +521,15 @@ public class GroundHog {
              */
             JSONObject fieldLst = new JSONObject();
             Iterator<Cell> cItor = iFirst.iterator();
+            Integer idCol = null;
             while (cItor.hasNext()) {
                 Cell cl = cItor.next();
                 String nm = cl.getStringCellValue();
-                if ((nm.toLowerCase().equals("id") || (nm.toLowerCase().equals("board name")))) {
+                if (nm.toLowerCase().equals("id")){
+                    idCol = cl.getColumnIndex();
+                    continue;
+                }
+                else if (nm.toLowerCase().equals("board name")) {
                     continue;
                 }
                 fieldLst.put(nm, cl.getColumnIndex());
@@ -507,14 +544,14 @@ public class GroundHog {
                 if (item.getCell(fieldLst.getInt(key)) != null) {
                     switch (key) {
                         case "Type": {
-                            //Convert Type string to typeId
+                            // Convert Type string to typeId
                         }
                         default: {
 
-                            if (item.getCell(fieldLst.getInt(key)).getCellType() == CellType.STRING) { 
-                                flds.put(key, item.getCell(fieldLst.getInt(key)).getStringCellValue()); 
+                            if (item.getCell(fieldLst.getInt(key)).getCellType() == CellType.STRING) {
+                                flds.put(key, item.getCell(fieldLst.getInt(key)).getStringCellValue());
                             } else {
-                                if (DateUtil.isCellDateFormatted(item.getCell(fieldLst.getInt(key)))){
+                                if (DateUtil.isCellDateFormatted(item.getCell(fieldLst.getInt(key)))) {
                                     SimpleDateFormat dtf = new SimpleDateFormat("yyyy-MM-dd");
                                     Date date = item.getCell(fieldLst.getInt(key)).getDateCellValue();
                                     flds.put(key, dtf.format(date).toString());
@@ -527,9 +564,15 @@ public class GroundHog {
                     }
                 }
             }
-
+ 
+        /**
+         * We need to either 'create' if ID == null && action == 'Create' or update if
+         * ID != null && action == 'Modify'
+         * 
+         */
+        if (change.getCell(actionCol).getStringCellValue().equals("Create")) {
             Id card = createCard(lka, boardNumber, flds); // Change from human readable to API fields on
-                                                                        // the way
+                                                          // the way
             if (card == null) {
                 System.out.printf("Could not create card on board %s with details: %s", boardNumber,
                         fieldLst.toString());
@@ -537,14 +580,22 @@ public class GroundHog {
             }
             return card.id;
 
+        } else if (change.getCell(actionCol).getStringCellValue().equals("Modify")) {
+            //Fetch the ID from the item and then fetch that card
+            CardLongRead card = lka.fetchCard(item.getCell(idCol).getStringCellValue());
+            Id id = updateCard(lka, boardNumber, card, flds);
+            if (id == null) {
+                System.out.printf("Could not modify card on board %s with details: %s", boardNumber,
+                        fieldLst.toString());
+                System.exit(1);
+            }
+            return id.id;
         }
+        //Unknown option comes here
         return null;
     }
 
     public Id createCard(LeanKitAccess lka, String bNum, JSONObject fieldLst) {
-
-        // Get available types so we can convert type string to typeid string
-        ArrayList<CardType> cTypes = lka.fetchCardTypes(bNum);
 
         // First create an empty card and get back the full structure as a string
 
@@ -554,6 +605,12 @@ public class GroundHog {
         if (newCard == null) {
             return null;
         }
+        return updateCard(lka, bNum, newCard, fieldLst);
+    }
+
+    public Id updateCard(LeanKitAccess lka, String bNum, CardLongRead card, JSONObject fieldLst) {
+        // Get available types so we can convert type string to typeid string
+        ArrayList<CardType> cTypes = lka.fetchCardTypes(bNum);
 
         JSONObject finalCard = new JSONObject();
         if (fieldLst.has("Type")) {
@@ -576,10 +633,10 @@ public class GroundHog {
                 case "type":
                     break;
                 default:
-                    //Make Sure field names from speadsheet are part of the Card model.
+                    // Make Sure field names from speadsheet are part of the Card model.
                     Field[] fld = CardLongRead.class.getFields();
                     Boolean fieldFound = false;
-                    for (int i =0 ; i < fld.length; i++) {
+                    for (int i = 0; i < fld.length; i++) {
                         if (fld[i].getName().equals(fldName)) {
                             fieldFound = true;
                             break;
@@ -587,16 +644,16 @@ public class GroundHog {
                     }
                     if (fieldFound) {
                         finalCard.put(fldName, fieldLst.get(fldName));
-                    }
-                    else {
-                        System.out.printf("Incorrect field name \"%s\" provided for update on card %s",fldName, newCard.id);
+                    } else {
+                        System.out.printf("Incorrect field name \"%s\" provided for update on card %s", fldName,
+                                card.id);
                     }
                     break;
             }
 
         }
         Id id = new Id();
-        id.id = lka.updateCardFromId(newCard.id, finalCard).id;
+        id.id = lka.updateCardFromId(card.id, finalCard).id;
         return id;
     }
 

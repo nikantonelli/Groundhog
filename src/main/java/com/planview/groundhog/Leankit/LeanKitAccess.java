@@ -109,20 +109,14 @@ public class LeanKitAccess {
      * 
      *         Create something and return just the id to it.
      */
-    public <T> T doCreate(Class<T> expectedResponseType) {
+    public <T> T execute(Class<T> expectedResponseType) {
         String result = processRequest();
         ObjectMapper om = new ObjectMapper();
-        System.out.println(result);
         try {
             return om.readValue(result, expectedResponseType);
         } catch (JsonProcessingException e) {
-            // TODO Auto-generated catch block
             e.printStackTrace();
         }
-        return null;
-    }
-
-    public String fetchCard(String id) {
         return null;
     }
 
@@ -148,7 +142,6 @@ public class LeanKitAccess {
             System.out.println(e.getMessage());
             System.exit(1);
         }
-        System.out.println(result);
         return result;
     }
 
@@ -195,8 +188,21 @@ public class LeanKitAccess {
         return null;
     }
 
+    
+    public CardLongRead fetchCard(String id) {
+        request = new HttpGet(config.url + "/io/card/"+id);
+        URI uri = null;
+        try {
+            uri = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "true").build();
+            ((HttpRequestBase) request).setURI(uri);
+        } catch (URISyntaxException e) {
+            System.out.println(e.getMessage());
+            System.exit(1);
+        }
+        return execute(CardLongRead.class);
+    }
+
     public CardLongRead updateCardFromId(String id, JSONObject updates){
-        System.out.printf("Updates: %s\n", updates.toString());
 
         //Create Leankit updates from the list
         JSONArray jsa = new JSONArray();
@@ -220,7 +226,7 @@ public class LeanKitAccess {
         }
         try {
             ((HttpPatch) request).setEntity(new StringEntity(jsa.toString()));
-            return doCreate(CardLongRead.class);
+            return execute(CardLongRead.class);
         } catch (UnsupportedEncodingException e) {
             e.printStackTrace();
             return null;
@@ -245,7 +251,7 @@ public class LeanKitAccess {
         }
         try {
             ((HttpPost) request).setEntity(new StringEntity(jItem.toString()));
-            return doCreate(CardLongRead.class);
+            return execute(CardLongRead.class);
         } catch (UnsupportedEncodingException e) {
             e.printStackTrace();
             return null;
@@ -266,7 +272,7 @@ public class LeanKitAccess {
         }
         try {
             ((HttpPost) request).setEntity(new StringEntity(jItem.toString()));
-            return doCreate(Id.class);
+            return execute(Id.class);
         } catch (UnsupportedEncodingException e) {
             e.printStackTrace();
             return null;
