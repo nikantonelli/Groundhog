@@ -1,5 +1,5 @@
 package com.planview.groundhog.Leankit;
 
 public class AssignedUser {
-    public String id, emailAddress, fullName, avatar;
+    public String id, emailAddress, firstName, fullName, avatar;
 }

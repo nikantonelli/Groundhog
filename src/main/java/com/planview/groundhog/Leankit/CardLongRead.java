@@ -16,8 +16,8 @@ public class CardLongRead {
     public CustomIcon customIcon;
     public ConnectedCardStats connectedCardStats;
     public ParentCard[] parentCards;
-    public AssignedUser[] assignedUsers;
-    public AssignedUser createdBy, updatedBy, movedBy, archivedBy;
+    public User[] assignedUsers;
+    public User createdBy, updatedBy, movedBy, archivedBy;
     public ItemType type;
     public BlockedStatus blockedStatus;
     public BoardCard board;

@@ -10,7 +10,6 @@ import java.util.Iterator;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.jsonFormatVisitors.JsonObjectFormatVisitor;
 import com.planview.groundhog.Configuration;
 
 import org.apache.http.HttpResponse;
@@ -45,11 +44,15 @@ public class LeanKitAccess {
 
     public <T> ArrayList<T> read(Class<T> expectedResponseType) {
 
+
         String bd = processRequest();
         JSONObject jresp = new JSONObject(bd);
         // Convert to a type to return to caller.
         if (bd != null) {
-            if (jresp.has("pageMeta")) {
+            if (jresp.has("error")) {
+                System.out.printf("ERROR: \"%s\" gave response: \"%s\"", request.getRequestLine(), jresp.toString());
+                System.exit(1);
+            } else if (jresp.has("pageMeta")) {
                 JSONObject pageMeta = new JSONObject(jresp.get("pageMeta").toString());
 
                 int totalReturned = pageMeta.getInt("totalRecords");
@@ -61,6 +64,9 @@ public class LeanKitAccess {
                 switch (typename[typename.length - 1]) {
                     case "BoardLongRead":
                         fieldName = "boards";
+                        break;
+                    case "User":
+                        fieldName = "users";
                         break;
                     default:
                         System.out.println("Incorrect item type returned from server API");
@@ -188,9 +194,39 @@ public class LeanKitAccess {
         return null;
     }
 
-    
+    public String fetchUserId(String emailAddress) {
+        request = new HttpGet(config.url + "io/user/");
+        URI uri = null;
+        try {
+            uri = new URIBuilder(request.getURI()).setParameter("search", emailAddress).build();
+            ((HttpRequestBase) request).setURI(uri);
+        } catch (URISyntaxException e) {
+            System.out.println(e.getMessage());
+            System.exit(1);
+        }
+
+        ArrayList<User> userd = read(User.class);
+
+        User user = null;
+        if (userd.size() > 0) {
+            // We found one or more with this name search. First try to find an exact match
+            Iterator<User> uItor = userd.iterator();
+            while (uItor.hasNext()) {
+                User u = uItor.next();
+                if (u.emailAddress.equals(emailAddress)) {
+                    user = u;
+                }
+            }
+            // Then take the first if that fails
+            if (user == null)
+                user = userd.get(0);
+            return user.id;
+        }
+        return null;
+    }
+
     public CardLongRead fetchCard(String id) {
-        request = new HttpGet(config.url + "/io/card/"+id);
+        request = new HttpGet(config.url + "/io/card/" + id);
         URI uri = null;
         try {
             uri = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "true").build();
@@ -201,21 +237,58 @@ public class LeanKitAccess {
         }
         return execute(CardLongRead.class);
     }
+    
+    public User fetchUser(String id) {
+        request = new HttpGet(config.url + "/io/user/" + id);
+        URI uri = null;
+        try {
+            uri = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "true").build();
+            ((HttpRequestBase) request).setURI(uri);
+        } catch (URISyntaxException e) {
+            System.out.println(e.getMessage());
+            System.exit(1);
+        }
+        return execute(User.class);
+    }
 
-    public CardLongRead updateCardFromId(String id, JSONObject updates){
 
-        //Create Leankit updates from the list
+
+    public CardLongRead updateCardFromId(String id, JSONObject updates) {
+
+        // Create Leankit updates from the list
         JSONArray jsa = new JSONArray();
         Iterator<String> keys = updates.keys();
-        while(keys.hasNext()) {
+        while (keys.hasNext()) {
             String key = keys.next();
-            JSONObject upd = new JSONObject();
-            upd.put("op", "replace");
-            upd.put("path", "/"+key);
-            upd.put("value", updates.get(key));
-            jsa.put(upd);
+            switch (key) {
+                case "assignedUsers":{
+                    //Need to add or remove based on what we already have?
+                    //Or does add/remove ignore duplicate calls. Trying this first.....
+                    if (updates.get(key).toString().startsWith("-")) {
+                        JSONObject upd = new JSONObject();
+                        upd.put("op", "remove");
+                        upd.put("path", "/assignedUserIds");
+                        upd.put("value",  fetchUserId(updates.get(key).toString().substring(1)));
+                        jsa.put(upd);
+                    } else {
+                        JSONObject upd = new JSONObject();
+                        upd.put("op", "add");
+                        upd.put("path", "/assignedUserIds/-");
+                        upd.put("value",  fetchUserId(updates.get(key).toString()));
+                        jsa.put(upd);
+                    }
+                    break;
+                }
+                default: {
+                    JSONObject upd = new JSONObject();
+                    upd.put("op", "replace");
+                    upd.put("path", "/" + key);
+                    upd.put("value", updates.get(key));
+                    jsa.put(upd);
+                }
+            }
         }
-        request = new HttpPatch(config.url + "io/card/"+id);
+        request = new HttpPatch(config.url + "io/card/" + id);
         URI uri = null;
         try {
             uri = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "false").build();
