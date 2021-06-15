@@ -4,6 +4,6 @@ import java.util.Date;
 
 public class Attachment {
     public String id, text;
-    public AssignedUser createdBy;
+    public User createdBy;
     public Date createdOn;
 }

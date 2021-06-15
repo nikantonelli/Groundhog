@@ -1,13 +1,11 @@
 package com.planview.groundhog.Leankit;
 
+import java.util.Date;
+
 public class Lane {
-    public int cardLimit;
-    public String description;
-    public String id;
-    public int index;
-    public String laneClassType;
-    public String laneType;
-    public String orientation;
-    public String title;
-    public String taskBoard;
+    public String activityId, description, id, name, laneClassType, laneType, orientation, parentLaneId, sortBy,
+            subscriptionId, title, taskBoard, cardStatus;
+    public Boolean active, isDefaultDropLane, isConnectionDoneLane, isCollapsed;
+    public Integer wipLimit, columns, cardLimit, cardCount, cardSize, index, archiveCardCount;
+    public Date creationDate;
 }

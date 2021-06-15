@@ -5,6 +5,6 @@ import java.util.Date;
 public class Comment {
     String id, text;
     Date createdOn;
-    AssignedUser createdBy;
+    User createdBy;
     String cardId;
 }

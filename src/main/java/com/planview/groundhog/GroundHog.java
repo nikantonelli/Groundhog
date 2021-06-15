@@ -16,9 +16,10 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 
-import com.planview.groundhog.Leankit.CardLongRead;
+import com.planview.groundhog.Leankit.Card;
 import com.planview.groundhog.Leankit.CardType;
 import com.planview.groundhog.Leankit.Id;
+import com.planview.groundhog.Leankit.Lane;
 import com.planview.groundhog.Leankit.LeanKitAccess;
 
 import org.apache.commons.cli.CommandLine;
@@ -473,7 +474,7 @@ public class GroundHog {
             item = iSht.getRow((int) (change.getCell(rowCol).getNumericCellValue() - 1));
 
             if ((idCol == null) || (titleCol == null)) {
-                System.out.printf("Cannot identify \"ID\" and \"title\" columns needed in sheet \"%s\" - skipping\n",
+                System.out.printf("Cannot locate \"ID\" and \"title\" columns needed in sheet \"%s\" - skipping\n",
                         iSht.getSheetName());
                 continue;
             }
@@ -482,7 +483,7 @@ public class GroundHog {
             if ((change.getCell(actionCol).getStringCellValue().equals("Create")) && ((boardCol == null)
                     || (item.getCell(boardCol) == null) || (item.getCell(boardCol).getStringCellValue().isEmpty()))) {
                 System.out.printf(
-                        "Cannot identify \"Board Name\" column needed in sheet \"%s\"  for a Create - skipping\n",
+                        "Cannot locate \"Board Name\" column needed in sheet \"%s\"  for a Create - skipping\n",
                         iSht.getSheetName());
                 continue;
             }
@@ -497,7 +498,7 @@ public class GroundHog {
             }
 
             if ((typeCol == null) || (item.getCell(typeCol) == null)) {
-                System.out.printf("Cannot identify \"Type\" column on row:  %d  - using default for board\n",
+                System.out.printf("Cannot locate \"Type\" column on row:  %d  - using default for board\n",
                         item.getRowNum());
             }
 
@@ -606,8 +607,9 @@ public class GroundHog {
             String key = keys.next();
             if (item.getCell(fieldLst.getInt(key)) != null) {
                 switch (key) {
-                    case "Type": {
-                        // Convert Type string to typeId in next level down
+                    case "Type": 
+                    case "Lane": {
+                        // Convert Type and Lane string to required type in next level down
                         break;
                     }
                     default: {
@@ -646,7 +648,7 @@ public class GroundHog {
 
         } else if (change.getCell(actionCol).getStringCellValue().equals("Modify")) {
             // Fetch the ID from the item and then fetch that card
-            CardLongRead card = lka.fetchCard(item.getCell(idCol).getStringCellValue());
+            Card card = lka.fetchCard(item.getCell(idCol).getStringCellValue());
             JSONObject flds = new JSONObject();
 
             //Need to get the correct type of field
@@ -678,7 +680,7 @@ public class GroundHog {
 
         // First create an empty card and get back the full structure as a string
 
-        CardLongRead newCard = lka.createCard(bNum, new JSONObject());
+        Card newCard = lka.createCard(bNum, new JSONObject());
 
         // If for any reason the network fails, we get a null back.
         if (newCard == null) {
@@ -687,9 +689,10 @@ public class GroundHog {
         return updateCard(lka, bNum, newCard, fieldLst);
     }
 
-    public Id updateCard(LeanKitAccess lka, String bNum, CardLongRead card, JSONObject fieldLst) {
+    public Id updateCard(LeanKitAccess lka, String bNum, Card card, JSONObject fieldLst) {
         // Get available types so we can convert type string to typeid string
         ArrayList<CardType> cTypes = lka.fetchCardTypes(bNum);
+        Lane[] bLanes = lka.fetchLanes(bNum);
 
         JSONObject finalCard = new JSONObject();
         if (fieldLst.has("Type")) {
@@ -712,9 +715,18 @@ public class GroundHog {
                 case "board name":
                 case "type":
                     break;
+                case "lane": {
+                    for ( int i = 0; i < bLanes.length; i++){
+                        if ( bLanes[i].name.equals(fieldLst.get(fldName))){
+                            finalCard.put(fldName, bLanes[i].id);
+                            break;
+                        }
+                    }
+                    break;
+                }
                 default:
                     // Make Sure field names from speadsheet are part of the Card model.
-                    Field[] fld = CardLongRead.class.getFields();
+                    Field[] fld = Card.class.getFields();
                     Boolean fieldFound = false;
                     for (int i = 0; i < fld.length; i++) {
                         if (fld[i].getName().equals(fldName)) {

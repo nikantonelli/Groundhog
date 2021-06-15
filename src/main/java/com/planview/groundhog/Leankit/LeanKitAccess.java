@@ -32,7 +32,7 @@ public class LeanKitAccess {
 
     Configuration config = null;
     HttpUriRequest request = null;
-    BoardLongRead[] boards = null;
+    Board[] boards = null;
 
     public LeanKitAccess(Configuration cfg) {
         config = cfg;
@@ -43,7 +43,6 @@ public class LeanKitAccess {
     }
 
     public <T> ArrayList<T> read(Class<T> expectedResponseType) {
-
 
         String bd = processRequest();
         JSONObject jresp = new JSONObject(bd);
@@ -62,7 +61,7 @@ public class LeanKitAccess {
                 ArrayList<T> items = new ArrayList<T>();
                 String[] typename = expectedResponseType.getName().split("\\.");
                 switch (typename[typename.length - 1]) {
-                    case "BoardLongRead":
+                    case "Board":
                         fieldName = "boards";
                         break;
                     case "User":
@@ -87,24 +86,45 @@ public class LeanKitAccess {
                 }
 
             } else {
-                // Getting CardTypes comes here, for example.
-                Iterator<String> sItor = jresp.keys();
-                String iStr = sItor.next();
                 ArrayList<T> items = new ArrayList<T>();
                 ObjectMapper om = new ObjectMapper();
-                JSONArray p = (JSONArray) jresp.get(iStr);
-                for (int i = 0; i < p.length(); i++) {
-                    try {
-                        items.add(om.readValue(p.get(i).toString(), expectedResponseType));
-                    } catch (JsonProcessingException | JSONException e) {
-                        e.printStackTrace();
+                switch (expectedResponseType.getSimpleName()) {
+                    case "CardType": {
+                        // Getting CardTypes comes here, for example.
+                        Iterator<String> sItor = jresp.keys();
+                        String iStr = sItor.next();
+                        JSONArray p = (JSONArray) jresp.get(iStr);
+                        for (int i = 0; i < p.length(); i++) {
+                            try {
+                                items.add(om.readValue(p.get(i).toString(), expectedResponseType));
+                            } catch (JsonProcessingException | JSONException e) {
+                                e.printStackTrace();
+                            }
+                        }  
+                        break;
+                    }
+                    //Returning a single item from a search for example
+                    case "Board": {
+                        try {
+                            JSONObject bdj = new JSONObject(bd);
+                            //Cannot process one of these if we don't know what's going to be in there!!!!
+                            if (bdj.has("userSettings")) { bdj.remove("userSettings");} 
+                            if (bdj.has("integrations")) { bdj.remove("integrations");} 
+                            items.add(om.readValue(bdj.toString(), expectedResponseType));
+                        } catch (JsonProcessingException e) {
+                            e.printStackTrace();
+                        }
+                        break;
+                    }
+                    default: {
+                        System.out.println("oops! don't recognise requested item type");
+                        System.exit(1);
                     }
                 }
                 return items;
             }
         }
         return null;
-
     }
 
     /**
@@ -160,6 +180,15 @@ public class LeanKitAccess {
         return null;
     }
 
+    public Lane[] fetchLanes(String boardId) {
+        request = new HttpGet(config.url + "io/board/" + boardId + "/");
+        ArrayList<Board> brd = read(Board.class);
+        if (brd.size() > 0) {
+            return brd.get(0).lanes;
+        }
+        return null;
+    }
+
     public String fetchBoardId(String name) {
         request = new HttpGet(config.url + "io/board/");
         URI uri = null;
@@ -174,14 +203,14 @@ public class LeanKitAccess {
         // Once you get the boards, you could cache them. There may be loads, but
         // shouldn't max
         // out memory.
-        ArrayList<BoardLongRead> brd = read(BoardLongRead.class);
+        ArrayList<Board> brd = read(Board.class);
 
-        BoardLongRead bd = null;
+        Board bd = null;
         if (brd.size() > 0) {
             // We found one or more with this name search. First try to find an exact match
-            Iterator<BoardLongRead> bItor = brd.iterator();
+            Iterator<Board> bItor = brd.iterator();
             while (bItor.hasNext()) {
-                BoardLongRead b = bItor.next();
+                Board b = bItor.next();
                 if (b.title.equals(name)) {
                     bd = b;
                 }
@@ -225,7 +254,7 @@ public class LeanKitAccess {
         return null;
     }
 
-    public CardLongRead fetchCard(String id) {
+    public Card fetchCard(String id) {
         request = new HttpGet(config.url + "/io/card/" + id);
         URI uri = null;
         try {
@@ -235,9 +264,9 @@ public class LeanKitAccess {
             System.out.println(e.getMessage());
             System.exit(1);
         }
-        return execute(CardLongRead.class);
+        return execute(Card.class);
     }
-    
+
     public User fetchUser(String id) {
         request = new HttpGet(config.url + "/io/user/" + id);
         URI uri = null;
@@ -251,9 +280,24 @@ public class LeanKitAccess {
         return execute(User.class);
     }
 
+    private Boolean doCardMove(JSONObject cardMove) {
+        request = new HttpPost(config.url + "/io/card/move");
+        try {
+            ((HttpPost) request).setEntity(new StringEntity(cardMove.toString()));
+        } catch (UnsupportedEncodingException e) {
+            e.printStackTrace();
+        }
+        String result = processRequest();
 
+        //TODO: Need to fix this..... debug for now.
+        if (result == null) {
+        return false;
+        } else{
+            return true;
+        }
+    }
 
-    public CardLongRead updateCardFromId(String id, JSONObject updates) {
+    public Card updateCardFromId(String id, JSONObject updates) {
 
         // Create Leankit updates from the list
         JSONArray jsa = new JSONArray();
@@ -261,20 +305,32 @@ public class LeanKitAccess {
         while (keys.hasNext()) {
             String key = keys.next();
             switch (key) {
-                case "assignedUsers":{
-                    //Need to add or remove based on what we already have?
-                    //Or does add/remove ignore duplicate calls. Trying this first.....
+                case "Lane": {
+                    // Need to find the lane on the board and set the card to be in it.
+                    JSONObject cardMove = new JSONObject();
+                    JSONArray cardId = new JSONArray();
+                    cardId.put(id);
+                    cardMove.put("cardIds", cardId);
+                    JSONObject dLane = new JSONObject();
+                    dLane.put("laneId", updates.get("Lane"));
+                    cardMove.put("destination", dLane);
+                    doCardMove(cardMove);
+                    break;
+                }
+                case "assignedUsers": {
+                    // Need to add or remove based on what we already have?
+                    // Or does add/remove ignore duplicate calls. Trying this first.....
                     if (updates.get(key).toString().startsWith("-")) {
                         JSONObject upd = new JSONObject();
                         upd.put("op", "remove");
                         upd.put("path", "/assignedUserIds");
-                        upd.put("value",  fetchUserId(updates.get(key).toString().substring(1)));
+                        upd.put("value", fetchUserId(updates.get(key).toString().substring(1)));
                         jsa.put(upd);
                     } else {
                         JSONObject upd = new JSONObject();
                         upd.put("op", "add");
                         upd.put("path", "/assignedUserIds/-");
-                        upd.put("value",  fetchUserId(updates.get(key).toString()));
+                        upd.put("value", fetchUserId(updates.get(key).toString()));
                         jsa.put(upd);
                     }
                     break;
@@ -299,14 +355,14 @@ public class LeanKitAccess {
         }
         try {
             ((HttpPatch) request).setEntity(new StringEntity(jsa.toString()));
-            return execute(CardLongRead.class);
+            return execute(Card.class);
         } catch (UnsupportedEncodingException e) {
             e.printStackTrace();
             return null;
         }
     }
 
-    public CardLongRead createCard(String boardId, JSONObject jItem) {
+    public Card createCard(String boardId, JSONObject jItem) {
 
         request = new HttpPost(config.url + "io/card/");
         jItem.put("boardId", boardId);
@@ -324,7 +380,7 @@ public class LeanKitAccess {
         }
         try {
             ((HttpPost) request).setEntity(new StringEntity(jItem.toString()));
-            return execute(CardLongRead.class);
+            return execute(Card.class);
         } catch (UnsupportedEncodingException e) {
             e.printStackTrace();
             return null;
