@@ -21,7 +21,9 @@ that might go in your system.....
 ## Command Line Options
 
 -f      the XLSX spreadsheet to read from
+
 -c      use this if the program is to be repetitively called by a cron job (needs -s option)
+
 -s      the name of the status file to use to keep track of what day the program is option
 
 (-m and -d not implemented yet)
