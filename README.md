@@ -33,6 +33,3 @@ every (24 hours at) 3 in the morning.
 
 If you do, then the program will attempt to make (and initialise) the file in the directory it is running in with the name you 
 supply. If it cannot, then it will fail completely
-
-
-
