@@ -503,7 +503,7 @@ public class GroundHog {
             }
 
             // If unset, it has a null value for the Leankit ID
-            if (item.getCell(idCol) == null) {
+            if ((item.getCell(idCol) == null) || (item.getCell(idCol).getStringCellValue() == "")) {
                 // Check if this is a 'create' operation. If not, ignore and continue past.
                 if (!change.getCell(actionCol).getStringCellValue().equals("Create")) {
                     System.out.printf("Ignoring action \"%s\" on item \"%s\" (no ID present in row: %d)\n",
@@ -571,7 +571,7 @@ public class GroundHog {
         XSSFSheet iSht = findSheet(change.getCell(itemShtCol).getStringCellValue());
         String boardNumber = lka
                 .fetchBoardId(item.getCell(findColumnFromSheet(iSht, "Board Name")).getStringCellValue());
-       
+
         /**
          * We need to get the header row for this sheet and work out which columns the
          * fields are in. It is possible that fields could be different between sheets,
@@ -597,46 +597,36 @@ public class GroundHog {
             }
             fieldLst.put(nm, cl.getColumnIndex());
         }
-        
+
         if (change.getCell(actionCol).getStringCellValue().equals("Create")) {
-        // Now 'translate' the spreadsheet name:col pairs to fieldName:value pairs
-        Iterator<String> keys = fieldLst.keys();
-        JSONObject flds = new JSONObject();
+            // Now 'translate' the spreadsheet name:col pairs to fieldName:value pairs
+            Iterator<String> keys = fieldLst.keys();
+            JSONObject flds = new JSONObject();
 
-        while (keys.hasNext()) {
-            String key = keys.next();
-            if (item.getCell(fieldLst.getInt(key)) != null) {
-                switch (key) {
-                    case "Type": 
-                    case "Lane": {
-                        // Convert Type and Lane string to required type in next level down
-                        break;
-                    }
-                    default: {
+            while (keys.hasNext()) {
+                String key = keys.next();
+                if (item.getCell(fieldLst.getInt(key)) != null) {
 
-                        if (item.getCell(fieldLst.getInt(key)).getCellType() == CellType.STRING) {
-                            flds.put(key, item.getCell(fieldLst.getInt(key)).getStringCellValue());
+                    if (item.getCell(fieldLst.getInt(key)).getCellType() == CellType.STRING) {
+                        flds.put(key, item.getCell(fieldLst.getInt(key)).getStringCellValue());
+                    } else {
+                        if (DateUtil.isCellDateFormatted(item.getCell(fieldLst.getInt(key)))) {
+                            SimpleDateFormat dtf = new SimpleDateFormat("yyyy-MM-dd");
+                            Date date = item.getCell(fieldLst.getInt(key)).getDateCellValue();
+                            flds.put(key, dtf.format(date).toString());
                         } else {
-                            if (DateUtil.isCellDateFormatted(item.getCell(fieldLst.getInt(key)))) {
-                                SimpleDateFormat dtf = new SimpleDateFormat("yyyy-MM-dd");
-                                Date date = item.getCell(fieldLst.getInt(key)).getDateCellValue();
-                                flds.put(key, dtf.format(date).toString());
-                            } else {
-                                flds.put(key, (int) item.getCell(fieldLst.getInt(key)).getNumericCellValue());
-                            }
+                            flds.put(key, (int) item.getCell(fieldLst.getInt(key)).getNumericCellValue());
                         }
                     }
-
                 }
             }
-        }
 
-        /**
-         * We need to either 'create' if ID == null && action == 'Create' or update if
-         * ID != null && action == 'Modify'
-         * 
-         */
-        
+            /**
+             * We need to either 'create' if ID == null && action == 'Create' or update if
+             * ID != null && action == 'Modify'
+             * 
+             */
+
             Id card = createCard(lka, boardNumber, flds); // Change from human readable to API fields on
                                                           // the way
             if (card == null) {
@@ -651,7 +641,7 @@ public class GroundHog {
             Card card = lka.fetchCard(item.getCell(idCol).getStringCellValue());
             JSONObject flds = new JSONObject();
 
-            //Need to get the correct type of field
+            // Need to get the correct type of field
             if (change.getCell(valueCol).getCellType() == CellType.STRING) {
                 flds.put(change.getCell(fieldCol).getStringCellValue(), change.getCell(valueCol).getStringCellValue());
             } else {
@@ -660,14 +650,14 @@ public class GroundHog {
                     Date date = change.getCell(valueCol).getDateCellValue();
                     flds.put(change.getCell(fieldCol).getStringCellValue(), dtf.format(date).toString());
                 } else {
-                    flds.put(change.getCell(fieldCol).getStringCellValue(), (int) change.getCell(valueCol).getNumericCellValue());
+                    flds.put(change.getCell(fieldCol).getStringCellValue(),
+                            (int) change.getCell(valueCol).getNumericCellValue());
                 }
             }
 
             Id id = updateCard(lka, boardNumber, card, flds);
             if (id == null) {
-                System.out.printf("Could not modify card on board %s with details: %s", boardNumber,
-                        flds.toString());
+                System.out.printf("Could not modify card on board %s with details: %s", boardNumber, flds.toString());
                 System.exit(1);
             }
             return id.id;
@@ -716,8 +706,8 @@ public class GroundHog {
                 case "type":
                     break;
                 case "lane": {
-                    for ( int i = 0; i < bLanes.length; i++){
-                        if ( bLanes[i].name.equals(fieldLst.get(fldName))){
+                    for (int i = 0; i < bLanes.length; i++) {
+                        if (bLanes[i].name.equals(fieldLst.get(fldName))) {
                             finalCard.put(fldName, bLanes[i].id);
                             break;
                         }

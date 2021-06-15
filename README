@@ -1,0 +1,19 @@
+## Command Line Options
+-f      the XLSX spreadsheet to read from
+-c      use this if the program is to be repetitively called by a cron job (needs -s option)
+-s      the name of the status file to use to keep track of what day the program is option
+
+(-m and -d not implemented yet)
+
+java -jar target\Groundhog-1.0-SNAPSHOT-spring-boot.jar -f "..\Scrum Teams.xlsx" -c -s ..\a.txt
+
+If you do not use the -c option then the program will attempt to sit in a sleep loop being woken up
+every (24 hours at) 3 in the morning.
+
+If you do, then the program will attempt to make (and initialise) the file in the directory it is running in with the name you 
+supply. If it cannot, then it will fail completely
+
+The program will attempt to prompt you for the right info in the spreadsheet, but if it can't work it out,
+then you will need to refer to the example one in this repo. The logs are sent out using Sytem.out from Java - wherever
+that might go in your system.....
+
