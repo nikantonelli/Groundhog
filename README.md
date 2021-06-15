@@ -6,8 +6,8 @@ An attempt to illustrate the progression of stories across a LeanKit board over 
 
 ## Setup
 
-The program can be run as a long term command line program, or as one that is called periodically from as
-as cron job. The program requires a spreadsheet to list the changes that you want to make.
+The program can be run as a long term command line program, or as one that is called periodically 
+as a cron job. The program requires a spreadsheet to list the changes that you want to make.
 
 If you just list the changes as a list of 'Create' entries, then effectively you have a card importer.
 
@@ -26,7 +26,7 @@ that might go in your system.....
 
 (-m and -d not implemented yet)
 
-java -jar target\Groundhog-1.0-SNAPSHOT-spring-boot.jar -f "..\Scrum Teams.xlsx" -c -s ..\a.txt
+java -jar target\Groundhog-1.0-SNAPSHOT-spring-boot.jar -f "Scrum Teams.xlsx" -c -s a.txt
 
 If you do not use the -c option then the program will attempt to sit in a sleep loop being woken up
 every (24 hours at) 3 in the morning.

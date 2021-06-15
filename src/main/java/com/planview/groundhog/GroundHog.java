@@ -189,6 +189,7 @@ public class GroundHog {
         Option statusFn = new Option("s", "status", true, "Status file used when called by cron job");
         statusFn.setRequired(false);
         opts.addOption(statusFn);
+        //TODO: What about making this delete all the non-groundhog cards
         Option deleteCycle = new Option("d", "delete", false, "Delete all artifacts on end of cycle");
         deleteCycle.setRequired(false);
         opts.addOption(deleteCycle);
