@@ -34,6 +34,7 @@ import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.xssf.usermodel.XSSFFormulaEvaluator;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.json.JSONObject;
@@ -156,10 +157,6 @@ public class GroundHog {
             }
 
         }
-    }
-
-    public void updateStatusDay(int day) {
-
     }
 
     public static void setUpStatusFile(File statusFs) {
@@ -523,7 +520,7 @@ public class GroundHog {
                 }
 
             }
-            System.out.printf("Committing to change \"%s\" on item \"%s\n\"",
+            System.out.printf("Committing to change \"%s\" on item \"%s\"\n",
                     change.getCell(actionCol).getStringCellValue(), item.getCell(titleCol).getStringCellValue());
             String id = doAction(change, item);
             if (id != null) {
@@ -533,6 +530,7 @@ public class GroundHog {
                     item.createCell(idCol);
                 }
                 item.getCell(idCol).setCellValue(id);
+                XSSFFormulaEvaluator.evaluateAllFormulaCells(wb);
             }
         }
         if (changeMade) {
@@ -643,7 +641,21 @@ public class GroundHog {
             JSONObject flds = new JSONObject();
 
             // Need to get the correct type of field
-            if (change.getCell(valueCol).getCellType() == CellType.STRING) {
+            if (change.getCell(valueCol).getCellType() == CellType.FORMULA) {
+                if ( change.getCell(valueCol).getCachedFormulaResultType() == CellType.STRING){
+                    flds.put(change.getCell(fieldCol).getStringCellValue(), change.getCell(valueCol).getStringCellValue());
+                }
+                else if ( change.getCell(valueCol).getCachedFormulaResultType() == CellType.NUMERIC){
+                    if (DateUtil.isCellDateFormatted(change.getCell(valueCol))) {
+                        SimpleDateFormat dtf = new SimpleDateFormat("yyyy-MM-dd");
+                        Date date = change.getCell(valueCol).getDateCellValue();
+                        flds.put(change.getCell(fieldCol).getStringCellValue(), dtf.format(date).toString());
+                    } else {
+                        flds.put(change.getCell(fieldCol).getStringCellValue(),
+                                (int) change.getCell(valueCol).getNumericCellValue());
+                    }
+                }
+            } else if (change.getCell(valueCol).getCellType() == CellType.STRING) {
                 flds.put(change.getCell(fieldCol).getStringCellValue(), change.getCell(valueCol).getStringCellValue());
             } else {
                 if (DateUtil.isCellDateFormatted(change.getCell(valueCol))) {
@@ -705,6 +717,11 @@ public class GroundHog {
                 case "id":
                 case "board name":
                 case "type":
+                    break;
+
+                //Add the parent straight in as it will be handled in the lower layer
+                case "parent":
+                    finalCard.put(fldName, fieldLst.get(fldName));
                     break;
                 case "lane": {
                     for (int i = 0; i < bLanes.length; i++) {

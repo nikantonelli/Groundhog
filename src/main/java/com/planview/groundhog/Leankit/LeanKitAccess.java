@@ -296,6 +296,22 @@ public class LeanKitAccess {
             return true;
         }
     }
+    private Boolean addCardParent(JSONObject cardChild) {
+        request = new HttpPost(config.url + "/io/card/connections");
+        try {
+            ((HttpPost) request).setEntity(new StringEntity(cardChild.toString()));
+        } catch (UnsupportedEncodingException e) {
+            e.printStackTrace();
+        }
+        String result = processRequest();
+
+        //TODO: Need to fix this..... debug for now.
+        if (result == null) {
+        return false;
+        } else{
+            return true;
+        }
+    }
 
     public Card updateCardFromId(String id, JSONObject updates) {
 
@@ -305,6 +321,24 @@ public class LeanKitAccess {
         while (keys.hasNext()) {
             String key = keys.next();
             switch (key) {
+                case "Parent": {
+                    if (updates.get(key).equals("0") || updates.get(key) == null || updates.get(key) == ""){
+                        System.out.printf("Error trying to set parent of %s to value %s", id, updates.get(key));
+                        break;
+                    }
+                    // Need to find the lane on the board and set the card to be in it.
+                    JSONObject cardChild = new JSONObject();
+                    JSONArray cardIds = new JSONArray();
+                    cardIds.put(id);
+                    cardChild.put("cardIds", cardIds);
+                    JSONArray dParents = new JSONArray();
+                    dParents.put(updates.get(key));
+                    JSONObject connections = new JSONObject();
+                    connections.put("parents", dParents);
+                    cardChild.put("connections", connections);
+                    addCardParent(cardChild);
+                    break;
+                }
                 case "Lane": {
                     // Need to find the lane on the board and set the card to be in it.
                     JSONObject cardMove = new JSONObject();
