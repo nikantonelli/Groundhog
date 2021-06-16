@@ -51,6 +51,9 @@ public class LeanKitAccess {
             if (jresp.has("error")) {
                 System.out.printf("ERROR: \"%s\" gave response: \"%s\"", request.getRequestLine(), jresp.toString());
                 System.exit(1);
+            } else if ( jresp.has("statusCode")){
+                System.out.printf("ERROR: \"%s\" gave response: \"%s\"", request.getRequestLine(), jresp.toString());
+                System.exit(1);
             } else if (jresp.has("pageMeta")) {
                 JSONObject pageMeta = new JSONObject(jresp.get("pageMeta").toString());
 

@@ -464,6 +464,9 @@ public class GroundHog {
             System.out.printf("No actions to take on day %d\n", day);
             return;
         }
+        else {
+            System.out.printf("%d actions to take on day %d\n", todaysChanges.size(), day);
+        }
 
         // Now scan through the changes doing the actions
         Iterator<Row> cItor = todaysChanges.iterator();
@@ -554,11 +557,14 @@ public class GroundHog {
             Integer loopCnt = 12;
             while (true) {
                 try {
+                    //System.out.printf("Opening file %s\n", xlsxfn);
                     FileOutputStream oStr = new FileOutputStream(xlsxfn);
+                    //System.out.printf("Writing file %s\n", xlsxfn);
                     wb.write(oStr);
-                    oStr.flush();
+                    //System.out.printf("Closing file %s\n", xlsxfn);
                     oStr.close();
-
+                    oStr = null;
+                    //System.out.printf("Closed file %s\n", xlsxfn);
                     return;
                 } catch (IOException e) {
                     Calendar now = Calendar.getInstance();
@@ -574,8 +580,6 @@ public class GroundHog {
                     }
                 }
             }
-        } else {
-            wb.close();
         }
 
     }
