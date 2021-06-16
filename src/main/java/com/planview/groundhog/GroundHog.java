@@ -463,8 +463,7 @@ public class GroundHog {
         if (todaysChanges.size() == 0) {
             System.out.printf("No actions to take on day %d\n", day);
             return;
-        }
-        else {
+        } else {
             System.out.printf("%d actions to take on day %d\n", todaysChanges.size(), day);
         }
 
@@ -555,33 +554,40 @@ public class GroundHog {
         }
         if (changeMade) {
             Integer loopCnt = 12;
-            while (true) {
+            while (loopCnt > 0) {
+                FileOutputStream oStr = null;
                 try {
-                    //System.out.printf("Opening file %s\n", xlsxfn);
-                    FileOutputStream oStr = new FileOutputStream(xlsxfn);
-                    //System.out.printf("Writing file %s\n", xlsxfn);
-                    wb.write(oStr);
-                    //System.out.printf("Closing file %s\n", xlsxfn);
-                    oStr.close();
-                    oStr = null;
-                    //System.out.printf("Closed file %s\n", xlsxfn);
-                    return;
-                } catch (IOException e) {
-                    Calendar now = Calendar.getInstance();
-                    Calendar then = Calendar.getInstance();
-                    then.add(Calendar.MINUTE, 1);
-                    Long timeDiff = then.getTimeInMillis() - now.getTimeInMillis();
-                    System.out.printf(
-                            "File \"%s\" in use. Please close to let this program continue (paused until %s)\n", xlsxfn,
-                            then.getTime());
-                    Thread.sleep(timeDiff);
-                    if (--loopCnt < 0) {
-                        return;
+                    oStr = new FileOutputStream(xlsxfn);
+                    try {
+                        wb.write(oStr);
+                        try {
+                            oStr.close();
+                            oStr = null;
+                            loopCnt = 0;
+                        } catch (IOException e) {
+                            System.out.printf("Error %s while closing file %s", e, xlsxfn);
+                        }
+                    } catch (IOException e) {
+                        System.out.printf("Error %s while writing file %s", e, xlsxfn);
+                        oStr.close(); // If this fails, just give up!
                     }
+                } catch (IOException e) {
+                    System.out.printf("Error %s while opening/closing file %s", e, xlsxfn);
                 }
+                if (loopCnt == 0) {
+                    break;
+                }
+
+                Calendar now = Calendar.getInstance();
+                Calendar then = Calendar.getInstance();
+                then.add(Calendar.MINUTE, 1);
+                Long timeDiff = then.getTimeInMillis() - now.getTimeInMillis();
+                System.out.printf("File \"%s\" in use. Please close to let this program continue (paused until %s)\n",
+                        xlsxfn, then.getTime());
+                Thread.sleep(timeDiff);
+                --loopCnt;
             }
         }
-
     }
 
     private String doAction(Row change, Row item) {
