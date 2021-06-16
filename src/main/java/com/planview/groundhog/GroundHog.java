@@ -692,6 +692,31 @@ public class GroundHog {
         return updateCard(lka, bNum, newCard, fieldLst);
     }
 
+    //Finds the first one that matches - make sure you don't have multiples of
+    //the same name at the top of the tree!!
+
+    private ArrayList<Lane> findLanesFromName(Lane[] lanes, String name) {
+        ArrayList<Lane> ln = new ArrayList<>();
+        for (int i = 0; i < lanes.length; i++) {
+            if (lanes[i].name.equals(name)) {
+                ln.add(lanes[i]);
+                break;
+            }
+        }
+        return ln;
+    }
+
+    private ArrayList<Lane> findLanesFromParentId(Lane[] lanes, String id) {
+        ArrayList<Lane> ln = new ArrayList<>();
+        for (int i = 0; i < lanes.length; i++) {
+            if (lanes[i].parentLaneId.equals(id)) {
+                ln.add(lanes[i]);
+                break;
+            }
+        }
+        return ln;
+    }
+
     public Id updateCard(LeanKitAccess lka, String bNum, Card card, JSONObject fieldLst) {
         // Get available types so we can convert type string to typeid string
         ArrayList<CardType> cTypes = lka.fetchCardTypes(bNum);
@@ -724,11 +749,42 @@ public class GroundHog {
                     finalCard.put(fldName, fieldLst.get(fldName));
                     break;
                 case "lane": {
-                    for (int i = 0; i < bLanes.length; i++) {
-                        if (bLanes[i].name.equals(fieldLst.get(fldName))) {
-                            finalCard.put(fldName, bLanes[i].id);
+                    String[] lanes = fieldLst.get(fldName).toString().split("\\|");
+                    if (lanes.length == 0 ) {
+                        System.out.printf("Cannot find lane of name %s on board %s", fldName, bNum);
+                        break;
+                    }
+                    //Get the list of lanes with the topmost parent name
+                    ArrayList<Lane> foundLanes = findLanesFromName(bLanes, lanes[0]);
+
+                    //If too many of these, then barf
+                    if (foundLanes.size() > 1) {
+                        System.out.printf("Ambiguous lane name %s on board %s", fldName, bNum);
+                        break;
+                    }
+                    Lane foundLane = foundLanes.get(0);
+                    //We have already found a lane, so set loop counter to 1
+                    Integer j = 1;
+                    do {
+                        //Get those that have this as a parent
+                        foundLanes = findLanesFromParentId(bLanes, foundLane.id);
+                        if (foundLanes != null) {
+                            //Make sure we only have the one child of that name
+                            if ( foundLanes.size() == 1) {
+                                foundLane = foundLanes.get(0);
+                            } else {
+                                System.out.printf("Ambiguous lane name %s in path %s on board %s", foundLane.name, fldName, bNum);
+                                break;
+                            }
+                        }
+                        else {
                             break;
                         }
+                        j++;
+                    } while ( j < lanes.length);
+
+                    if (foundLane != null){
+                        finalCard.put(fldName, foundLane.id);
                     }
                     break;
                 }
