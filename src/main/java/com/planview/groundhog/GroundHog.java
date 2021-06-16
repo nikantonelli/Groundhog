@@ -50,7 +50,7 @@ public class GroundHog {
     static String statusFile = "";
     static String moveLane = null;
     static Boolean deleteItems = false;
-    static Integer updatePeriod = 60*60*24;
+    static Integer updatePeriod = 60 * 60 * 24;
 
     /**
      * One line sheet that contains the credentials to access the Leankit Server
@@ -93,6 +93,11 @@ public class GroundHog {
                     Long timeDiff = then.getTimeInMillis() - now.getTimeInMillis();
                     // Do todays activity and then sleep
                     hog.activity(day++);
+                    // Reset file after the time period has expired
+                    if (day >= hog.getRefresh()) {
+                        // We need to reset the day to zero
+                        day = 0;
+                    }
                     System.out.println("Sleeping until: " + then.getTime());
                     Thread.sleep(timeDiff);
                 } catch (InterruptedException e) {
@@ -141,8 +146,9 @@ public class GroundHog {
                 fis.close();
                 hog.activity(fDay++);
                 // Reset file after the time period has expired
-                if (fDay > hog.getRefresh()) {
+                if (fDay >= hog.getRefresh()) {
                     // We need to reset the day to zero
+                    fDay = 0;
                     setUpStatusFile(statusFs);
                 } else {
                     settings.put("day", fDay);
@@ -190,7 +196,7 @@ public class GroundHog {
         Option updateRate = new Option("u", "update", true, "Rate to process updates (in seconds). Defaults to 1 day");
         updateRate.setRequired(false);
         opts.addOption(updateRate);
-        //TODO: What about making this delete all the non-groundhog cards
+        // TODO: What about making this delete all the non-groundhog cards
         Option deleteCycle = new Option("d", "delete", false, "Delete all artifacts on end of cycle");
         deleteCycle.setRequired(false);
         opts.addOption(deleteCycle);
@@ -244,6 +250,7 @@ public class GroundHog {
         }
         try {
             wb = new XSSFWorkbook(xlsxfis);
+            xlsxfis.close();
         } catch (IOException e) {
             System.out.println(e.getMessage());
             System.exit(1);
@@ -454,7 +461,7 @@ public class GroundHog {
         }
 
         if (todaysChanges.size() == 0) {
-            System.out.printf("No actions to take on day %d", day);
+            System.out.printf("No actions to take on day %d\n", day);
             return;
         }
 
@@ -539,6 +546,8 @@ public class GroundHog {
                 }
                 item.getCell(idCol).setCellValue(id);
                 XSSFFormulaEvaluator.evaluateAllFormulaCells(wb);
+            } else {
+                System.out.println("Got null back from doAction(). Seek help!");
             }
         }
         if (changeMade) {
@@ -549,16 +558,16 @@ public class GroundHog {
                     wb.write(oStr);
                     oStr.flush();
                     oStr.close();
-                    wb.close();
 
                     return;
                 } catch (IOException e) {
                     Calendar now = Calendar.getInstance();
                     Calendar then = Calendar.getInstance();
-                    then.add(Calendar.HOUR, 1);
+                    then.add(Calendar.MINUTE, 1);
                     Long timeDiff = then.getTimeInMillis() - now.getTimeInMillis();
-                    System.out.printf("File \"%s\" in use. Please close to let this program continue in an hour (%s)",
-                            xlsxfn, then.getTime());
+                    System.out.printf(
+                            "File \"%s\" in use. Please close to let this program continue (paused until %s)\n", xlsxfn,
+                            then.getTime());
                     Thread.sleep(timeDiff);
                     if (--loopCnt < 0) {
                         return;
@@ -576,9 +585,15 @@ public class GroundHog {
         // creation
         LeanKitAccess lka = new LeanKitAccess(config);
         XSSFSheet iSht = findSheet(change.getCell(itemShtCol).getStringCellValue());
-        String boardNumber = lka
-                .fetchBoardId(item.getCell(findColumnFromSheet(iSht, "Board Name")).getStringCellValue());
+        String boardName = (item.getCell(findColumnFromSheet(iSht, "Board Name")).getStringCellValue());
+        String boardNumber = lka.fetchBoardId(boardName);
 
+        if (boardNumber == null) {
+            System.out.printf("Cannot find board with name %s for item on sheet %s, row %d\n", boardName,
+                    change.getCell(itemShtCol).getStringCellValue(),
+                    (int) change.getCell(rowCol).getNumericCellValue());
+            return null;
+        }
         /**
          * We need to get the header row for this sheet and work out which columns the
          * fields are in. It is possible that fields could be different between sheets,
@@ -650,10 +665,10 @@ public class GroundHog {
 
             // Need to get the correct type of field
             if (change.getCell(valueCol).getCellType() == CellType.FORMULA) {
-                if ( change.getCell(valueCol).getCachedFormulaResultType() == CellType.STRING){
-                    flds.put(change.getCell(fieldCol).getStringCellValue(), change.getCell(valueCol).getStringCellValue());
-                }
-                else if ( change.getCell(valueCol).getCachedFormulaResultType() == CellType.NUMERIC){
+                if (change.getCell(valueCol).getCachedFormulaResultType() == CellType.STRING) {
+                    flds.put(change.getCell(fieldCol).getStringCellValue(),
+                            change.getCell(valueCol).getStringCellValue());
+                } else if (change.getCell(valueCol).getCachedFormulaResultType() == CellType.NUMERIC) {
                     if (DateUtil.isCellDateFormatted(change.getCell(valueCol))) {
                         SimpleDateFormat dtf = new SimpleDateFormat("yyyy-MM-dd");
                         Date date = change.getCell(valueCol).getDateCellValue();
@@ -700,8 +715,8 @@ public class GroundHog {
         return updateCard(lka, bNum, newCard, fieldLst);
     }
 
-    //Finds the first one that matches - make sure you don't have multiples of
-    //the same name at the top of the tree!!
+    // Finds the first one that matches - make sure you don't have multiples of
+    // the same name at the top of the tree!!
 
     private ArrayList<Lane> findLanesFromName(Lane[] lanes, String name) {
         ArrayList<Lane> ln = new ArrayList<>();
@@ -752,46 +767,49 @@ public class GroundHog {
                 case "type":
                     break;
 
-                //Add the parent straight in as it will be handled in the lower layer
+                // Add the parent straight in as it will be handled in the lower layer
                 case "parent":
                     finalCard.put(fldName, fieldLst.get(fldName));
                     break;
                 case "lane": {
                     String[] lanes = fieldLst.get(fldName).toString().split("\\|");
-                    if (lanes.length == 0 ) {
+                    if (lanes.length == 0) {
                         System.out.printf("Cannot find lane of name %s on board %s", fldName, bNum);
                         break;
                     }
-                    //Get the list of lanes with the topmost parent name
+                    // Get the list of lanes with the topmost parent name
                     ArrayList<Lane> foundLanes = findLanesFromName(bLanes, lanes[0]);
 
-                    //If too many of these, then barf
+                    // If too many of these, then barf
                     if (foundLanes.size() > 1) {
                         System.out.printf("Ambiguous lane name %s on board %s", fldName, bNum);
                         break;
                     }
                     Lane foundLane = foundLanes.get(0);
-                    //We have already found a lane, so set loop counter to 1
-                    Integer j = 1;
-                    do {
-                        //Get those that have this as a parent
+                    // We have already found a lane, so set loop counter to 1
+                    // Integer j = 1;
+                    for (int j = 1; j < lanes.length; j++) {
+
+                        // do {
+                        // Get those that have this as a parent
                         foundLanes = findLanesFromParentId(bLanes, foundLane.id);
                         if (foundLanes != null) {
-                            //Make sure we only have the one child of that name
-                            if ( foundLanes.size() == 1) {
+                            // Make sure we only have the one child of that name
+                            if (foundLanes.size() == 1) {
                                 foundLane = foundLanes.get(0);
                             } else {
-                                System.out.printf("Ambiguous lane name %s in path %s on board %s", foundLane.name, fldName, bNum);
+                                System.out.printf("Ambiguous lane name %s in path %s on board %s", foundLane.name,
+                                        fldName, bNum);
                                 break;
                             }
-                        }
-                        else {
+                        } else {
                             break;
                         }
-                        j++;
-                    } while ( j < lanes.length);
+                        // j++;
+                        // } while ( j < lanes.length);
+                    }
 
-                    if (foundLane != null){
+                    if (foundLane != null) {
                         finalCard.put(fldName, foundLane.id);
                     }
                     break;
