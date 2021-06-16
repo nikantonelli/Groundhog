@@ -50,6 +50,7 @@ public class GroundHog {
     static String statusFile = "";
     static String moveLane = null;
     static Boolean deleteItems = false;
+    static Integer updatePeriod = 60*60*24;
 
     /**
      * One line sheet that contains the credentials to access the Leankit Server
@@ -85,7 +86,7 @@ public class GroundHog {
                 try {
                     Calendar now = Calendar.getInstance();
                     Calendar then = Calendar.getInstance();
-                    then.add(Calendar.HOUR, 1);
+                    then.add(Calendar.SECOND, updatePeriod);
                     // then.set(Calendar.HOUR_OF_DAY, 3); // Set to three in the morning
                     // then.set(Calendar.MINUTE, 0);
                     // then.set(Calendar.SECOND, 0);
@@ -186,6 +187,9 @@ public class GroundHog {
         Option statusFn = new Option("s", "status", true, "Status file used when called by cron job");
         statusFn.setRequired(false);
         opts.addOption(statusFn);
+        Option updateRate = new Option("u", "update", true, "Rate to process updates (in seconds). Defaults to 1 day");
+        updateRate.setRequired(false);
+        opts.addOption(updateRate);
         //TODO: What about making this delete all the non-groundhog cards
         Option deleteCycle = new Option("d", "delete", false, "Delete all artifacts on end of cycle");
         deleteCycle.setRequired(false);
@@ -210,6 +214,10 @@ public class GroundHog {
         useCron = cl.hasOption("cron");
         if (cl.hasOption("status")) {
             statusFile = cl.getOptionValue("status");
+        }
+
+        if (cl.hasOption("update")) {
+            updatePeriod = Integer.parseInt(cl.getOptionValue("update"));
         }
 
         // Move items to a lane and then delete them if needed - or just delete.
