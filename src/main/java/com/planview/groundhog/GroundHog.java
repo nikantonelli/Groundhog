@@ -845,7 +845,7 @@ public class GroundHog {
 
         }
         Id id = new Id();
-        id.id = lka.updateCardFromId(card.id, finalCard).id;
+        id.id = lka.updateCardFromId(bNum, card, finalCard).id;
         return id;
     }
 

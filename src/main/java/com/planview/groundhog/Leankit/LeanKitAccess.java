@@ -51,7 +51,7 @@ public class LeanKitAccess {
             if (jresp.has("error")) {
                 System.out.printf("ERROR: \"%s\" gave response: \"%s\"", request.getRequestLine(), jresp.toString());
                 System.exit(1);
-            } else if ( jresp.has("statusCode")){
+            } else if (jresp.has("statusCode")) {
                 System.out.printf("ERROR: \"%s\" gave response: \"%s\"", request.getRequestLine(), jresp.toString());
                 System.exit(1);
             } else if (jresp.has("pageMeta")) {
@@ -103,16 +103,20 @@ public class LeanKitAccess {
                             } catch (JsonProcessingException | JSONException e) {
                                 e.printStackTrace();
                             }
-                        }  
+                        }
                         break;
                     }
-                    //Returning a single item from a search for example
+                    // Returning a single item from a search for example
                     case "Board": {
                         try {
                             JSONObject bdj = new JSONObject(bd);
-                            //Cannot process one of these if we don't know what's going to be in there!!!!
-                            if (bdj.has("userSettings")) { bdj.remove("userSettings");} 
-                            if (bdj.has("integrations")) { bdj.remove("integrations");} 
+                            // Cannot process one of these if we don't know what's going to be in there!!!!
+                            if (bdj.has("userSettings")) {
+                                bdj.remove("userSettings");
+                            }
+                            if (bdj.has("integrations")) {
+                                bdj.remove("integrations");
+                            }
                             items.add(om.readValue(bdj.toString(), expectedResponseType));
                         } catch (JsonProcessingException e) {
                             e.printStackTrace();
@@ -192,7 +196,7 @@ public class LeanKitAccess {
         return null;
     }
 
-    public String fetchBoardId(String name) {
+    public ArrayList<Board> fetchBoardFromName(String name) {
         request = new HttpGet(config.url + "io/board/");
         URI uri = null;
         try {
@@ -206,8 +210,17 @@ public class LeanKitAccess {
         // Once you get the boards, you could cache them. There may be loads, but
         // shouldn't max
         // out memory.
-        ArrayList<Board> brd = read(Board.class);
+        return read(Board.class);
+    }
 
+    public ArrayList<Board> fetchBoardFromId(String id) {
+        request = new HttpGet(config.url + "io/board/" + id);
+        return read(Board.class);
+    }
+
+    public String fetchBoardId(String name) {
+
+        ArrayList<Board> brd = fetchBoardFromName(name);
         Board bd = null;
         if (brd.size() > 0) {
             // We found one or more with this name search. First try to find an exact match
@@ -292,13 +305,14 @@ public class LeanKitAccess {
         }
         String result = processRequest();
 
-        //TODO: Need to fix this..... debug for now.
+        // TODO: Need to fix this..... debug for now.
         if (result == null) {
-        return false;
-        } else{
+            return false;
+        } else {
             return true;
         }
     }
+
     private Boolean addCardParent(JSONObject cardChild) {
         request = new HttpPost(config.url + "/io/card/connections");
         try {
@@ -308,15 +322,28 @@ public class LeanKitAccess {
         }
         String result = processRequest();
 
-        //TODO: Need to fix this..... debug for now.
+        // TODO: Need to fix this..... debug for now.
         if (result == null) {
-        return false;
-        } else{
+            return false;
+        } else {
             return true;
         }
     }
 
-    public Card updateCardFromId(String id, JSONObject updates) {
+    private Integer findTagIndex(Card card, String name){
+        Integer index = -1;
+        String[] names = card.tags;
+        if (names != null) {
+            for ( int i = 0; i < names.length; i++) {
+                if (names[i] == name) {
+                    index = i;
+                }
+            }
+        }
+        return index;
+    }
+
+    public Card updateCardFromId(String bNum, Card card, JSONObject updates) {
 
         // Create Leankit updates from the list
         JSONArray jsa = new JSONArray();
@@ -325,14 +352,14 @@ public class LeanKitAccess {
             String key = keys.next();
             switch (key) {
                 case "Parent": {
-                    if (updates.get(key).equals("0") || updates.get(key) == null || updates.get(key) == ""){
-                        System.out.printf("Error trying to set parent of %s to value %s", id, updates.get(key));
+                    if (updates.get(key).equals("0") || updates.get(key) == null || updates.get(key) == "") {
+                        System.out.printf("Error trying to set parent of %s to value %s", card.id, updates.get(key));
                         break;
                     }
                     // Need to find the lane on the board and set the card to be in it.
                     JSONObject cardChild = new JSONObject();
                     JSONArray cardIds = new JSONArray();
-                    cardIds.put(id);
+                    cardIds.put(card.id);
                     cardChild.put("cardIds", cardIds);
                     JSONArray dParents = new JSONArray();
                     dParents.put(updates.get(key));
@@ -346,12 +373,34 @@ public class LeanKitAccess {
                     // Need to find the lane on the board and set the card to be in it.
                     JSONObject cardMove = new JSONObject();
                     JSONArray cardId = new JSONArray();
-                    cardId.put(id);
+                    cardId.put(card.id);
                     cardMove.put("cardIds", cardId);
                     JSONObject dLane = new JSONObject();
                     dLane.put("laneId", updates.get("Lane"));
                     cardMove.put("destination", dLane);
                     doCardMove(cardMove);
+                    break;
+                }
+                case "tags": {
+                    // Need to add or remove based on what we already have?
+                    // Or does add/remove ignore duplicate calls. Trying this first.....
+                    if (updates.get(key).toString().startsWith("-")) {
+                        Integer tIndex = findTagIndex(card, updates.get(key).toString().substring(1));
+                        // If we found it, we can remove it
+                        if (tIndex >= 0) {
+                            JSONObject upd = new JSONObject();
+                            upd.put("op", "remove");
+                            upd.put("path", "/tags");
+                            upd.put("value", tIndex);
+                            jsa.put(upd);
+                        }
+                    } else {
+                        JSONObject upd = new JSONObject();
+                        upd.put("op", "add");
+                        upd.put("path", "/tags/-");
+                        upd.put("value", updates.get(key).toString());
+                        jsa.put(upd);
+                    }
                     break;
                 }
                 case "assignedUsers": {
@@ -381,7 +430,7 @@ public class LeanKitAccess {
                 }
             }
         }
-        request = new HttpPatch(config.url + "io/card/" + id);
+        request = new HttpPatch(config.url + "io/card/" + card.id);
         URI uri = null;
         try {
             uri = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "false").build();
