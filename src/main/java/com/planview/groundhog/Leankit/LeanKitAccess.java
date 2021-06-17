@@ -383,26 +383,18 @@ public class LeanKitAccess {
                                 values.get("value1").toString());
                         break;
                     } else if (values.get("value1").toString().startsWith("-")) {
-                        // TODO: remove it
+                        JSONObject upd2 = new JSONObject();
+                        upd2.put("op", "remove");
+                        upd2.put("path", "/parentCardId");
+                        upd2.put("value", values.get("value1").toString().substring(1));
+                        jsa.put(upd2);
+                        break;
                     } else {
-                        // TODO: Check whether we can use op:add, path:/parentCardId, value:156222222
-                        // instead
                         JSONObject upd2 = new JSONObject();
                         upd2.put("op", "add");
                         upd2.put("path", "/parentCardId");
                         upd2.put("value", values.get("value1").toString());
                         jsa.put(upd2);
-
-                        // JSONObject cardChild = new JSONObject();
-                        // JSONArray cardIds = new JSONArray();
-                        // cardIds.put(card.id);
-                        // cardChild.put("cardIds", cardIds);
-                        // JSONArray dParents = new JSONArray();
-                        // dParents.put(updates.get(key));
-                        // JSONObject connections = new JSONObject();
-                        // connections.put("parents", dParents);
-                        // cardChild.put("connections", connections);
-                        // addCardParent(cardChild);
                         break;
                     }
                 }
@@ -420,14 +412,6 @@ public class LeanKitAccess {
                         upd2.put("value", values.get("value2").toString());
                         jsa.put(upd2);
                     }
-                    // JSONObject cardMove = new JSONObject();
-                    // JSONArray cardId = new JSONArray();
-                    // cardId.put(card.id);
-                    // cardMove.put("cardIds", cardId);
-                    // JSONObject dLane = new JSONObject();
-                    // dLane.put("laneId", updates.get("Lane"));
-                    // cardMove.put("destination", dLane);
-                    // doCardMove(cardMove);
                     break;
                 }
                 case "tags": {
