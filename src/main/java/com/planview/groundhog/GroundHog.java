@@ -818,8 +818,19 @@ public class GroundHog {
                 // User might have put id, ID or Id, so just try to accommodate
                 case "id":
                 case "board name":
-                case "type":
                     break;
+                case "type": {
+                    JSONObject fldVals = (JSONObject) fieldLst.get("Type");
+                    // Find type in cTypes and add new. If not present, then 'create' will default
+                    for (int i = 0; i < cTypes.size(); i++) {
+                        if (cTypes.get(i).name.equals(fldVals.get("value1"))) {
+                            JSONObject result = new JSONObject();
+                            result.put("value1", cTypes.get(i).id);
+                            finalUpdates.put("typeId", result);
+                        }
+                    }
+                    break;
+                }
 
                 // Add the parent straight in as it will be handled in the lower layer
                 case "parent":
