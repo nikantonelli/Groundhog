@@ -350,9 +350,12 @@ public class LeanKitAccess {
         Iterator<String> keys = updates.keys();
         while (keys.hasNext()) {
             String key = keys.next();
+            JSONObject values = (JSONObject) updates.get(key);
             switch (key) {
                 case "blockReason": {
-                    if (updates.get(key).toString().startsWith("-")) {  //Make it startsWith rather than equals just in case user forgets
+                    if (values.get("value1").toString().startsWith("-")) { // Make it startsWith rather than equals just
+                                                                           // in
+                        // case user forgets
                         JSONObject upd = new JSONObject();
                         upd.put("op", "replace");
                         upd.put("path", "/isBlocked");
@@ -368,46 +371,70 @@ public class LeanKitAccess {
                         JSONObject upd2 = new JSONObject();
                         upd2.put("op", "add");
                         upd2.put("path", "/blockReason");
-                        upd2.put("value", updates.get(key).toString());
+                        upd2.put("value", values.get("value1").toString());
                         jsa.put(upd2);
                     }
                     break;
                 }
                 case "Parent": {
-                    if (updates.get(key).equals("0") || updates.get(key) == null || updates.get(key) == "") {
-                        System.out.printf("Error trying to set parent of %s to value %s", card.id, updates.get(key));
+                    if ((values.get("value1") == null) || (values.get("value1").toString() == "")
+                            || (values.get("value1").toString() == "0")) {
+                        System.out.printf("Error trying to set parent of %s to value \"%s\"\n", card.id,
+                                values.get("value1").toString());
+                        break;
+                    } else if (values.get("value1").toString().startsWith("-")) {
+                        // TODO: remove it
+                    } else {
+                        // TODO: Check whether we can use op:add, path:/parentCardId, value:156222222
+                        // instead
+                        JSONObject upd2 = new JSONObject();
+                        upd2.put("op", "add");
+                        upd2.put("path", "/parentCardId");
+                        upd2.put("value", values.get("value1").toString());
+                        jsa.put(upd2);
+
+                        // JSONObject cardChild = new JSONObject();
+                        // JSONArray cardIds = new JSONArray();
+                        // cardIds.put(card.id);
+                        // cardChild.put("cardIds", cardIds);
+                        // JSONArray dParents = new JSONArray();
+                        // dParents.put(updates.get(key));
+                        // JSONObject connections = new JSONObject();
+                        // connections.put("parents", dParents);
+                        // cardChild.put("connections", connections);
+                        // addCardParent(cardChild);
                         break;
                     }
-                    // Need to find the lane on the board and set the card to be in it.
-                    JSONObject cardChild = new JSONObject();
-                    JSONArray cardIds = new JSONArray();
-                    cardIds.put(card.id);
-                    cardChild.put("cardIds", cardIds);
-                    JSONArray dParents = new JSONArray();
-                    dParents.put(updates.get(key));
-                    JSONObject connections = new JSONObject();
-                    connections.put("parents", dParents);
-                    cardChild.put("connections", connections);
-                    addCardParent(cardChild);
-                    break;
                 }
                 case "Lane": {
                     // Need to find the lane on the board and set the card to be in it.
-                    JSONObject cardMove = new JSONObject();
-                    JSONArray cardId = new JSONArray();
-                    cardId.put(card.id);
-                    cardMove.put("cardIds", cardId);
-                    JSONObject dLane = new JSONObject();
-                    dLane.put("laneId", updates.get("Lane"));
-                    cardMove.put("destination", dLane);
-                    doCardMove(cardMove);
+                    JSONObject upd1 = new JSONObject();
+                    upd1.put("op", "replace");
+                    upd1.put("path", "/laneId");
+                    upd1.put("value", values.get("value1").toString());
+                    jsa.put(upd1);
+                    if (values.has("value2")) {
+                        JSONObject upd2 = new JSONObject();
+                        upd2.put("op", "add");
+                        upd2.put("path", "/wipOverrideComment");
+                        upd2.put("value", values.get("value2").toString());
+                        jsa.put(upd2);
+                    }
+                    // JSONObject cardMove = new JSONObject();
+                    // JSONArray cardId = new JSONArray();
+                    // cardId.put(card.id);
+                    // cardMove.put("cardIds", cardId);
+                    // JSONObject dLane = new JSONObject();
+                    // dLane.put("laneId", updates.get("Lane"));
+                    // cardMove.put("destination", dLane);
+                    // doCardMove(cardMove);
                     break;
                 }
                 case "tags": {
                     // Need to add or remove based on what we already have?
                     // Or does add/remove ignore duplicate calls. Trying this first.....
-                    if (updates.get(key).toString().startsWith("-")) {
-                        Integer tIndex = findTagIndex(card, updates.get(key).toString().substring(1));
+                    if (values.get("value1").toString().toString().startsWith("-")) {
+                        Integer tIndex = findTagIndex(card, values.get("value1").toString().substring(1));
                         // If we found it, we can remove it
                         if (tIndex >= 0) {
                             JSONObject upd = new JSONObject();
@@ -419,7 +446,7 @@ public class LeanKitAccess {
                         JSONObject upd = new JSONObject();
                         upd.put("op", "add");
                         upd.put("path", "/tags/-");
-                        upd.put("value", updates.get(key).toString());
+                        upd.put("value", values.get("value1").toString());
                         jsa.put(upd);
                     }
                     break;
@@ -427,17 +454,17 @@ public class LeanKitAccess {
                 case "assignedUsers": {
                     // Need to add or remove based on what we already have?
                     // Or does add/remove ignore duplicate calls. Trying this first.....
-                    if (updates.get(key).toString().startsWith("-")) {
+                    if (values.get("value1").toString().startsWith("-")) {
                         JSONObject upd = new JSONObject();
                         upd.put("op", "remove");
                         upd.put("path", "/assignedUserIds");
-                        upd.put("value", fetchUserId(updates.get(key).toString().substring(1)));
+                        upd.put("value", fetchUserId(values.get("value1").toString().substring(1)));
                         jsa.put(upd);
                     } else {
                         JSONObject upd = new JSONObject();
                         upd.put("op", "add");
                         upd.put("path", "/assignedUserIds/-");
-                        upd.put("value", fetchUserId(updates.get(key).toString()));
+                        upd.put("value", fetchUserId(values.get("value1").toString()));
                         jsa.put(upd);
                     }
                     break;
@@ -446,7 +473,7 @@ public class LeanKitAccess {
                     JSONObject upd = new JSONObject();
                     upd.put("op", "replace");
                     upd.put("path", "/" + key);
-                    upd.put("value", updates.get(key));
+                    upd.put("value", values.get("value1"));
                     jsa.put(upd);
                 }
             }

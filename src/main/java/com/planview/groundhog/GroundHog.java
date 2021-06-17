@@ -52,6 +52,7 @@ public class GroundHog {
     static String moveLane = null;
     static Boolean deleteItems = false;
     static Integer updatePeriod = 60 * 60 * 24;
+    static Integer startDay = -1;
 
     /**
      * One line sheet that contains the credentials to access the Leankit Server
@@ -79,7 +80,7 @@ public class GroundHog {
         hog.getCommandLine(args);
         hog.parseXlsx();
         hog.getConfig();
-        Integer day = 0;
+        Integer day = (startDay >= 0) ? startDay : 0;
 
         Scanner scanner = new Scanner(System.in);
         // Check to see if there is command line option to loop or use cron
@@ -111,7 +112,7 @@ public class GroundHog {
 
                         System.out.printf("Hit <CR> to continue to day %d... ", day);
                         String line = scanner.nextLine();
-                        System.out.printf(line);    //Do this so that the compiler doesn't remove the unused 'line'
+                        System.out.printf(line); // Do this so that the compiler doesn't remove the unused 'line'
                         // Do todays activity and then sleep
                         hog.activity(day++);
                         // Reset file after the time period has expired
@@ -219,6 +220,9 @@ public class GroundHog {
         Option updateRate = new Option("u", "update", true, "Rate to process updates (in seconds). Defaults to 1 day");
         updateRate.setRequired(false);
         opts.addOption(updateRate);
+        Option beginDay = new Option("b", "begin", true, "Day to begin updates. Defaults to day 0");
+        beginDay.setRequired(false);
+        opts.addOption(beginDay);
         // TODO: What about making this delete all the non-groundhog cards
         Option deleteCycle = new Option("d", "delete", false, "Delete all artifacts on end of cycle");
         deleteCycle.setRequired(false);
@@ -247,6 +251,10 @@ public class GroundHog {
 
         if (cl.hasOption("update")) {
             updatePeriod = Integer.parseInt(cl.getOptionValue("update"));
+        }
+
+        if (cl.hasOption("begin")) {
+            startDay = Integer.parseInt(cl.getOptionValue("begin"));
         }
 
         // Move items to a lane and then delete them if needed - or just delete.
@@ -440,7 +448,8 @@ public class GroundHog {
     Integer rowCol = null;
     Integer actionCol = null;
     Integer fieldCol = null;
-    Integer valueCol = null;
+    Integer value1Col = null;
+    Integer value2Col = null;
 
     Integer findColumnFromSheet(XSSFSheet sht, String name) {
         Iterator<Row> row = sht.iterator();
@@ -465,12 +474,13 @@ public class GroundHog {
         rowCol = findColumnFromSheet(changesSht, "Item Row");
         actionCol = findColumnFromSheet(changesSht, "Action");
         fieldCol = findColumnFromSheet(changesSht, "Field");
-        valueCol = findColumnFromSheet(changesSht, "Final Value");
+        value1Col = findColumnFromSheet(changesSht, "Value1");
+        value2Col = findColumnFromSheet(changesSht, "Value2");
 
         if ((dayCol == null) || (itemShtCol == null) || (rowCol == null) || (actionCol == null) || (fieldCol == null)
-                || (valueCol == null)) {
+                || (value1Col == null) || (value2Col == null)) {
             System.out.printf(
-                    "Could not find all required columns in %s sheet: \"Day Delta\", \"Item Sheet\", \"Item Row\", \"Action\", \"Field\", \"Final Value\"",
+                    "Could not find all required columns in %s sheet: \"Day Delta\", \"Item Sheet\", \"Item Row\", \"Action\", \"Field\", \"Value1\", \"Value2\"",
                     changesSht.getSheetName());
             System.exit(1);
         }
@@ -566,7 +576,7 @@ public class GroundHog {
             } else {
                 System.out.printf("\"%s\" set \"%s\" to \"%s\" on item %s \"%s\"\n",
                         change.getCell(actionCol).getStringCellValue(), change.getCell(fieldCol).getStringCellValue(),
-                        change.getCell(valueCol).getStringCellValue(), item.getCell(idCol).getStringCellValue(),
+                        change.getCell(value1Col).getStringCellValue(), item.getCell(idCol).getStringCellValue(),
                         item.getCell(titleCol).getStringCellValue());
             }
             String id = doAction(change, item);
@@ -610,10 +620,12 @@ public class GroundHog {
 
                 Calendar now = Calendar.getInstance();
                 Calendar then = Calendar.getInstance();
-                then.add(Calendar.MINUTE, 1);
+                then.add(Calendar.SECOND, 5);
                 Long timeDiff = then.getTimeInMillis() - now.getTimeInMillis();
-                System.out.printf("File \"%s\" in use. Please close to let this program continue (paused until %s)\n",
-                        xlsxfn, then.getTime());
+                if (changeMade) {
+                    System.out.printf("File \"%s\" in use. Please close to let this program continue\n", xlsxfn);
+                    changeMade = false;
+                }
                 Thread.sleep(timeDiff);
                 --loopCnt;
             }
@@ -666,20 +678,11 @@ public class GroundHog {
             JSONObject flds = new JSONObject();
 
             while (keys.hasNext()) {
+                JSONObject vals = new JSONObject();
                 String key = keys.next();
                 if (item.getCell(fieldLst.getInt(key)) != null) {
-
-                    if (item.getCell(fieldLst.getInt(key)).getCellType() == CellType.STRING) {
-                        flds.put(key, item.getCell(fieldLst.getInt(key)).getStringCellValue());
-                    } else {
-                        if (DateUtil.isCellDateFormatted(item.getCell(fieldLst.getInt(key)))) {
-                            SimpleDateFormat dtf = new SimpleDateFormat("yyyy-MM-dd");
-                            Date date = item.getCell(fieldLst.getInt(key)).getDateCellValue();
-                            flds.put(key, dtf.format(date).toString());
-                        } else {
-                            flds.put(key, (int) item.getCell(fieldLst.getInt(key)).getNumericCellValue());
-                        }
-                    }
+                    vals.put("value1", convertCells(item, fieldLst.getInt(key)));
+                    flds.put(key, vals);
                 }
             }
 
@@ -701,44 +704,52 @@ public class GroundHog {
         } else if (change.getCell(actionCol).getStringCellValue().equals("Modify")) {
             // Fetch the ID from the item and then fetch that card
             Card card = lka.fetchCard(item.getCell(idCol).getStringCellValue());
-            JSONObject flds = new JSONObject();
+            JSONObject fld = new JSONObject();
+            JSONObject vals = new JSONObject();
 
-            // Need to get the correct type of field
-            if (change.getCell(valueCol).getCellType() == CellType.FORMULA) {
-                if (change.getCell(valueCol).getCachedFormulaResultType() == CellType.STRING) {
-                    flds.put(change.getCell(fieldCol).getStringCellValue(),
-                            change.getCell(valueCol).getStringCellValue());
-                } else if (change.getCell(valueCol).getCachedFormulaResultType() == CellType.NUMERIC) {
-                    if (DateUtil.isCellDateFormatted(change.getCell(valueCol))) {
-                        SimpleDateFormat dtf = new SimpleDateFormat("yyyy-MM-dd");
-                        Date date = change.getCell(valueCol).getDateCellValue();
-                        flds.put(change.getCell(fieldCol).getStringCellValue(), dtf.format(date).toString());
-                    } else {
-                        flds.put(change.getCell(fieldCol).getStringCellValue(),
-                                (int) change.getCell(valueCol).getNumericCellValue());
-                    }
-                }
-            } else if (change.getCell(valueCol).getCellType() == CellType.STRING) {
-                flds.put(change.getCell(fieldCol).getStringCellValue(), change.getCell(valueCol).getStringCellValue());
-            } else {
-                if (DateUtil.isCellDateFormatted(change.getCell(valueCol))) {
-                    SimpleDateFormat dtf = new SimpleDateFormat("yyyy-MM-dd");
-                    Date date = change.getCell(valueCol).getDateCellValue();
-                    flds.put(change.getCell(fieldCol).getStringCellValue(), dtf.format(date).toString());
-                } else {
-                    flds.put(change.getCell(fieldCol).getStringCellValue(),
-                            (int) change.getCell(valueCol).getNumericCellValue());
-                }
-            }
+            vals.put("value1", convertCells(change, value1Col));
+            vals.put("value2", convertCells(change, value2Col));
 
-            Id id = updateCard(lka, boardNumber, card, flds);
+            fld.put(change.getCell(fieldCol).getStringCellValue(), vals);
+            Id id = updateCard(lka, boardNumber, card, fld);
             if (id == null) {
-                System.out.printf("Could not modify card on board %s with details: %s", boardNumber, flds.toString());
+                System.out.printf("Could not modify card on board %s with details: %s", boardNumber, fld.toString());
                 System.exit(1);
             }
             return id.id;
         }
         // Unknown option comes here
+        return null;
+    }
+
+    private Object convertCells(Row change, Integer col) {
+
+        if (change.getCell(col) != null) {
+            // Need to get the correct type of field
+            if (change.getCell(col).getCellType() == CellType.FORMULA) {
+                if (change.getCell(col).getCachedFormulaResultType() == CellType.STRING) {
+                    return change.getCell(col).getStringCellValue();
+                } else if (change.getCell(col).getCachedFormulaResultType() == CellType.NUMERIC) {
+                    if (DateUtil.isCellDateFormatted(change.getCell(col))) {
+                        SimpleDateFormat dtf = new SimpleDateFormat("yyyy-MM-dd");
+                        Date date = change.getCell(col).getDateCellValue();
+                        return dtf.format(date).toString();
+                    } else {
+                        return (int) change.getCell(col).getNumericCellValue();
+                    }
+                }
+            } else if (change.getCell(col).getCellType() == CellType.STRING) {
+                return change.getCell(col).getStringCellValue();
+            } else {
+                if (DateUtil.isCellDateFormatted(change.getCell(col))) {
+                    SimpleDateFormat dtf = new SimpleDateFormat("yyyy-MM-dd");
+                    Date date = change.getCell(col).getDateCellValue();
+                    return dtf.format(date).toString();
+                } else {
+                    return (int) change.getCell(col).getNumericCellValue();
+                }
+            }
+        }
         return null;
     }
 
@@ -785,12 +796,13 @@ public class GroundHog {
         ArrayList<CardType> cTypes = lka.fetchCardTypes(bNum);
         Lane[] bLanes = lka.fetchLanes(bNum);
 
-        JSONObject finalCard = new JSONObject();
+        JSONObject finalUpdates = new JSONObject();
         if (fieldLst.has("Type")) {
+            JSONObject fldVals = (JSONObject) fieldLst.get("Type");
             // Find type in cTypes and add new. If not present, then 'create' will default
             for (int i = 0; i < cTypes.size(); i++) {
-                if (cTypes.get(i).name.equals(fieldLst.get("Type"))) {
-                    finalCard.put("typeId", cTypes.get(i).id);
+                if (cTypes.get(i).name.equals(fldVals.get("value1"))) {
+                    finalUpdates.put("typeId", cTypes.get(i).id);
                 }
             }
 
@@ -800,8 +812,10 @@ public class GroundHog {
         Iterator<String> fields = fieldLst.keys();
         while (fields.hasNext()) {
             String fldName = fields.next();
+            JSONObject fldValues = (JSONObject) fieldLst.get(fldName);
             switch (fldName.toLowerCase()) {
                 // Remove these regardless of what the user has set the case to
+                // User might have put id, ID or Id, so just try to accommodate
                 case "id":
                 case "board name":
                 case "type":
@@ -809,10 +823,10 @@ public class GroundHog {
 
                 // Add the parent straight in as it will be handled in the lower layer
                 case "parent":
-                    finalCard.put(fldName, fieldLst.get(fldName));
+                    finalUpdates.put(fldName, fieldLst.get(fldName));
                     break;
                 case "lane": {
-                    String[] lanes = fieldLst.get(fldName).toString().split("\\|");
+                    String[] lanes = fldValues.get("value1").toString().split("\\|");
                     if (lanes.length == 0) {
                         System.out.printf("Cannot find lane of name %s on board %s", fldName, bNum);
                         break;
@@ -822,7 +836,8 @@ public class GroundHog {
 
                     // If too many of these, then barf
                     if (foundLanes.size() > 1) {
-                        System.out.printf("Ambiguous lane name %s on board %s", fldName, bNum);
+                        System.out.printf("Ambiguous lane name %s on board %s", fldValues.get("value1").toString(),
+                                bNum);
                         break;
                     }
                     Lane foundLane = foundLanes.get(0);
@@ -839,7 +854,7 @@ public class GroundHog {
                                 foundLane = foundLanes.get(0);
                             } else {
                                 System.out.printf("Ambiguous lane name %s in path %s on board %s", foundLane.name,
-                                        fldName, bNum);
+                                        fldValues.get("value1").toString(), bNum);
                                 break;
                             }
                         } else {
@@ -850,7 +865,12 @@ public class GroundHog {
                     }
 
                     if (foundLane != null) {
-                        finalCard.put(fldName, foundLane.id);
+                        JSONObject result = new JSONObject();
+                        result.put("value1", foundLane.id);
+                        if (fldValues.has("value2")) {
+                            result.put("value2", fldValues.get("value2"));
+                        }
+                        finalUpdates.put(fldName, result);
                     }
                     break;
                 }
@@ -865,7 +885,7 @@ public class GroundHog {
                         }
                     }
                     if (fieldFound) {
-                        finalCard.put(fldName, fieldLst.get(fldName));
+                        finalUpdates.put(fldName, fieldLst.get(fldName));
                     } else {
                         System.out.printf("Incorrect field name \"%s\" provided for update on card %s\n", fldName,
                                 card.id);
@@ -875,7 +895,7 @@ public class GroundHog {
 
         }
         Id id = new Id();
-        id.id = lka.updateCardFromId(bNum, card, finalCard).id;
+        id.id = lka.updateCardFromId(bNum, card, finalUpdates).id;
         return id;
     }
 
