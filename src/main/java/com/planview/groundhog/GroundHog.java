@@ -565,14 +565,14 @@ public class GroundHog {
                             oStr = null;
                             loopCnt = 0;
                         } catch (IOException e) {
-                            System.out.printf("Error %s while closing file %s", e, xlsxfn);
+                            System.out.printf("Error %s while closing file %s\n", e, xlsxfn);
                         }
                     } catch (IOException e) {
-                        System.out.printf("Error %s while writing file %s", e, xlsxfn);
+                        System.out.printf("Error %s while writing file %s\n", e, xlsxfn);
                         oStr.close(); // If this fails, just give up!
                     }
                 } catch (IOException e) {
-                    System.out.printf("Error %s while opening/closing file %s", e, xlsxfn);
+                    System.out.printf("Error %s while opening/closing file %s\n", e, xlsxfn);
                 }
                 if (loopCnt == 0) {
                     break;
