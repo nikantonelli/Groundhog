@@ -15,6 +15,7 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Scanner;
 
 import com.planview.groundhog.Leankit.Card;
 import com.planview.groundhog.Leankit.CardType;
@@ -80,31 +81,52 @@ public class GroundHog {
         hog.getConfig();
         Integer day = 0;
 
+        Scanner scanner = new Scanner(System.in);
         // Check to see if there is command line option to loop or use cron
         if (!useCron) {
+
             while (true) {
                 try {
-                    Calendar now = Calendar.getInstance();
-                    Calendar then = Calendar.getInstance();
-                    then.add(Calendar.SECOND, updatePeriod);
-                    // then.set(Calendar.HOUR_OF_DAY, 3); // Set to three in the morning
-                    // then.set(Calendar.MINUTE, 0);
-                    // then.set(Calendar.SECOND, 0);
-                    Long timeDiff = then.getTimeInMillis() - now.getTimeInMillis();
-                    // Do todays activity and then sleep
-                    hog.activity(day++);
-                    // Reset file after the time period has expired
-                    if (day >= hog.getRefresh()) {
-                        // We need to reset the day to zero
-                        day = 0;
+
+                    if (updatePeriod > 0) {
+                        // Do todays activity and then sleep
+                        hog.activity(day++);
+                        Calendar now = Calendar.getInstance();
+                        Calendar then = Calendar.getInstance();
+                        then.add(Calendar.SECOND, updatePeriod);
+                        // then.set(Calendar.HOUR_OF_DAY, 3); // Set to three in the morning
+                        // then.set(Calendar.MINUTE, 0);
+                        // then.set(Calendar.SECOND, 0);
+                        Long timeDiff = then.getTimeInMillis() - now.getTimeInMillis();
+
+                        // Reset file after the time period has expired
+                        if (day >= hog.getRefresh()) {
+                            // We need to reset the day to zero
+                            day = 0;
+                        }
+                        System.out.println("Sleeping until: " + then.getTime());
+                        Thread.sleep(timeDiff);
+                    } else {
+                        // Wait for a user input to continue
+
+                        System.out.printf("Hit <CR> to continue to day %d... ", day);
+                        String line = scanner.nextLine();
+                        System.out.printf(line);    //Do this so that the compiler doesn't remove the unused 'line'
+                        // Do todays activity and then sleep
+                        hog.activity(day++);
+                        // Reset file after the time period has expired
+                        if (day >= hog.getRefresh()) {
+                            // We need to reset the day to zero
+                            day = 0;
+                        }
                     }
-                    System.out.println("Sleeping until: " + then.getTime());
-                    Thread.sleep(timeDiff);
                 } catch (InterruptedException e) {
                     System.out.println("Early wake from daily timer");
                     System.exit(1);
                 }
+
             }
+
         } else {
             // Create a local file to hold the day
             File statusFs = new File(statusFile);
@@ -164,6 +186,7 @@ public class GroundHog {
             }
 
         }
+        scanner.close();
     }
 
     public static void setUpStatusFile(File statusFs) {
@@ -542,8 +565,9 @@ public class GroundHog {
                         item.getCell(boardCol).getStringCellValue());
             } else {
                 System.out.printf("\"%s\" set \"%s\" to \"%s\" on item %s \"%s\"\n",
-                        change.getCell(actionCol).getStringCellValue(), change.getCell(fieldCol).getStringCellValue(), change.getCell(valueCol).getStringCellValue(),
-                        item.getCell(idCol).getStringCellValue(), item.getCell(titleCol).getStringCellValue());
+                        change.getCell(actionCol).getStringCellValue(), change.getCell(fieldCol).getStringCellValue(),
+                        change.getCell(valueCol).getStringCellValue(), item.getCell(idCol).getStringCellValue(),
+                        item.getCell(titleCol).getStringCellValue());
             }
             String id = doAction(change, item);
             if (id != null) {
