@@ -330,11 +330,11 @@ public class LeanKitAccess {
         }
     }
 
-    private Integer findTagIndex(Card card, String name){
+    private Integer findTagIndex(Card card, String name) {
         Integer index = -1;
         String[] names = card.tags;
         if (names != null) {
-            for ( int i = 0; i < names.length; i++) {
+            for (int i = 0; i < names.length; i++) {
                 if (names[i].equals(name)) {
                     index = i;
                 }
@@ -351,6 +351,28 @@ public class LeanKitAccess {
         while (keys.hasNext()) {
             String key = keys.next();
             switch (key) {
+                case "blockReason": {
+                    if (updates.get(key).toString().startsWith("-")) {  //Make it startsWith rather than equals just in case user forgets
+                        JSONObject upd = new JSONObject();
+                        upd.put("op", "replace");
+                        upd.put("path", "/isBlocked");
+                        upd.put("value", false);
+                        jsa.put(upd);
+
+                    } else {
+                        JSONObject upd1 = new JSONObject();
+                        upd1.put("op", "replace");
+                        upd1.put("path", "/isBlocked");
+                        upd1.put("value", true);
+                        jsa.put(upd1);
+                        JSONObject upd2 = new JSONObject();
+                        upd2.put("op", "add");
+                        upd2.put("path", "/blockReason");
+                        upd2.put("value", updates.get(key).toString());
+                        jsa.put(upd2);
+                    }
+                    break;
+                }
                 case "Parent": {
                     if (updates.get(key).equals("0") || updates.get(key) == null || updates.get(key) == "") {
                         System.out.printf("Error trying to set parent of %s to value %s", card.id, updates.get(key));
@@ -390,7 +412,7 @@ public class LeanKitAccess {
                         if (tIndex >= 0) {
                             JSONObject upd = new JSONObject();
                             upd.put("op", "remove");
-                            upd.put("path", "/tags/"+tIndex);
+                            upd.put("path", "/tags/" + tIndex);
                             jsa.put(upd);
                         }
                     } else {

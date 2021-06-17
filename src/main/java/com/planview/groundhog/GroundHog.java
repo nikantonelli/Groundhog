@@ -537,8 +537,14 @@ public class GroundHog {
                 }
 
             }
-            System.out.printf("Committing to change \"%s\" on item \"%s\"\n",
-                    change.getCell(actionCol).getStringCellValue(), item.getCell(titleCol).getStringCellValue());
+            if (change.getCell(actionCol).getStringCellValue().equals("Create")) {
+                System.out.printf("Create item %s on board \"%s\"\n", item.getCell(titleCol).getStringCellValue(),
+                        item.getCell(boardCol).getStringCellValue());
+            } else {
+                System.out.printf("\"%s\" set \"%s\" to \"%s\" on item %s \"%s\"\n",
+                        change.getCell(actionCol).getStringCellValue(), change.getCell(fieldCol).getStringCellValue(), change.getCell(valueCol).getStringCellValue(),
+                        item.getCell(idCol).getStringCellValue(), item.getCell(titleCol).getStringCellValue());
+            }
             String id = doAction(change, item);
             if (id != null) {
                 changeMade = true;
@@ -837,7 +843,7 @@ public class GroundHog {
                     if (fieldFound) {
                         finalCard.put(fldName, fieldLst.get(fldName));
                     } else {
-                        System.out.printf("Incorrect field name \"%s\" provided for update on card %s", fldName,
+                        System.out.printf("Incorrect field name \"%s\" provided for update on card %s\n", fldName,
                                 card.id);
                     }
                     break;
