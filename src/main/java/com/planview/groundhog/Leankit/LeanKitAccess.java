@@ -335,7 +335,7 @@ public class LeanKitAccess {
         String[] names = card.tags;
         if (names != null) {
             for ( int i = 0; i < names.length; i++) {
-                if (names[i] == name) {
+                if (names[i].equals(name)) {
                     index = i;
                 }
             }
@@ -390,8 +390,7 @@ public class LeanKitAccess {
                         if (tIndex >= 0) {
                             JSONObject upd = new JSONObject();
                             upd.put("op", "remove");
-                            upd.put("path", "/tags");
-                            upd.put("value", tIndex);
+                            upd.put("path", "/tags/"+tIndex);
                             jsa.put(upd);
                         }
                     } else {
