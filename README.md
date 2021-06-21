@@ -20,7 +20,7 @@ The program will attempt to prompt you on how to build the right info in the spr
 
 -c      use this if the program is to be repetitively called by a cron job (needs -s option)
 
--s      the name of the status file to use to keep track of what day the program is option
+-s      the name of the status file to use to keep track of what day the program is on when using the -c option
 
 -o      run through the list once
 
@@ -32,7 +32,7 @@ java -jar target\Groundhog-1.0-SNAPSHOT-spring-boot.jar -f "Scrum Teams.xlsx" -c
 
 If you do not use the -c option then the program will attempt to sit in a sleep loop being woken up every (24 hours at) 3 in the morning.
 
-If you do, then the program will attempt to make (and initialise) the file in the directory it is running in with the name you supply. If it cannot, then it will fail completely
+If you do, then the program will attempt to make (and initialise) the file in the directory it is running in with the (-s) name you supply. If it cannot, then it will fail completely
 
 ## Config data
 
@@ -45,4 +45,8 @@ The Day Delta is the day from the start of the program that you want the change 
 
 ## Artifact Info
 
-The other sheets that require artifact definitions can have any number of plain fields defined for the creation event. The first two columns must have titles ID and 'Board Name'. The ID is blank at the start and when the artifact is created, the program wil write the id of the one created back into the ID field. THe 'Board Name' is obviously where the artifact resides. The ID can be used for further updates (e.g. add Parent)
+The other sheets that require artifact definitions can have any number of plain fields defined for the creation event. The first two columns must have titles ID and 'Board Name'. The ID is blank at the start and when the artifact is created, the program wil write the id of the one created back into the ID field. The 'Board Name' is obviously where the artifact resides. The ID can be used for further updates (e.g. add Parent)
+
+If you put a field in that is not part of the standard Card field set, then it is checked in the list of Custom Fields for the board. At the moment, the type of Custom field is not checked, so might barf at some point. Log an issue if something doesn't work.
+
+
