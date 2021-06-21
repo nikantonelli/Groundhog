@@ -308,40 +308,6 @@ public class LeanKitAccess {
         return execute(User.class);
     }
 
-    private Boolean doCardMove(JSONObject cardMove) {
-        request = new HttpPost(config.url + "/io/card/move");
-        try {
-            ((HttpPost) request).setEntity(new StringEntity(cardMove.toString()));
-        } catch (UnsupportedEncodingException e) {
-            e.printStackTrace();
-        }
-        String result = processRequest();
-
-        // TODO: Need to fix this..... debug for now.
-        if (result == null) {
-            return false;
-        } else {
-            return true;
-        }
-    }
-
-    private Boolean addCardParent(JSONObject cardChild) {
-        request = new HttpPost(config.url + "/io/card/connections");
-        try {
-            ((HttpPost) request).setEntity(new StringEntity(cardChild.toString()));
-        } catch (UnsupportedEncodingException e) {
-            e.printStackTrace();
-        }
-        String result = processRequest();
-
-        // TODO: Need to fix this..... debug for now.
-        if (result == null) {
-            return false;
-        } else {
-            return true;
-        }
-    }
-
     private Integer findTagIndex(Card card, String name) {
         Integer index = -1;
         String[] names = card.tags;
