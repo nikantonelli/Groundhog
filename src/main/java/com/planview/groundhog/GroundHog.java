@@ -17,8 +17,10 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Scanner;
 
+import com.planview.groundhog.Leankit.Board;
 import com.planview.groundhog.Leankit.Card;
 import com.planview.groundhog.Leankit.CardType;
+import com.planview.groundhog.Leankit.CustomField;
 import com.planview.groundhog.Leankit.Id;
 import com.planview.groundhog.Leankit.Lane;
 import com.planview.groundhog.Leankit.LeanKitAccess;
@@ -53,6 +55,7 @@ public class GroundHog {
     static Boolean deleteItems = false;
     static Integer updatePeriod = 60 * 60 * 24;
     static Integer startDay = -1;
+    static Boolean cycleOnce = false;
 
     /**
      * One line sheet that contains the credentials to access the Leankit Server
@@ -103,7 +106,13 @@ public class GroundHog {
                         // Reset file after the time period has expired
                         if (day >= hog.getRefresh()) {
                             // We need to reset the day to zero
-                            day = 0;
+                            if (cycleOnce == false){
+                                day = 0;
+                            }
+                            else {
+                                System.out.printf("Completed cycle once as requested");
+                                System.exit(1);
+                            }
                         }
                         System.out.println("Sleeping until: " + then.getTime());
                         Thread.sleep(timeDiff);
@@ -118,7 +127,13 @@ public class GroundHog {
                         // Reset file after the time period has expired
                         if (day >= hog.getRefresh()) {
                             // We need to reset the day to zero
-                            day = 0;
+                            if (cycleOnce == false){
+                                day = 0;
+                            }
+                            else {
+                                System.out.printf("Completed cycle once as requested");
+                                System.exit(1);
+                            }
                         }
                     }
                 } catch (InterruptedException e) {
@@ -222,7 +237,10 @@ public class GroundHog {
         opts.addOption(updateRate);
         Option beginDay = new Option("b", "begin", true, "Day to begin updates. Defaults to day 0");
         beginDay.setRequired(false);
-        opts.addOption(beginDay);
+        opts.addOption(beginDay); 
+        Option doOnce = new Option("o", "once", false, "Run updates from Day 0 to end only once (do not loop)");
+        doOnce.setRequired(false);
+        opts.addOption(doOnce);
         // TODO: What about making this delete all the non-groundhog cards
         Option deleteCycle = new Option("d", "delete", false, "Delete all artifacts on end of cycle");
         deleteCycle.setRequired(false);
@@ -250,6 +268,7 @@ public class GroundHog {
         }
 
         if (cl.hasOption("update")) {
+            useCron = false;
             updatePeriod = Integer.parseInt(cl.getOptionValue("update"));
         }
 
@@ -260,6 +279,10 @@ public class GroundHog {
         // Move items to a lane and then delete them if needed - or just delete.
         if (cl.hasOption("move")) {
             moveLane = cl.getOptionValue("move");
+        }
+        
+        if (cl.hasOption("once")) {
+            cycleOnce = true;
         }
         deleteItems = cl.hasOption("delete");
 
@@ -573,11 +596,6 @@ public class GroundHog {
             if (change.getCell(actionCol).getStringCellValue().equals("Create")) {
                 System.out.printf("Create item %s on board \"%s\"\n", item.getCell(titleCol).getStringCellValue(),
                         item.getCell(boardCol).getStringCellValue());
-            } else {
-                System.out.printf("\"%s\" set \"%s\" to \"%s\" on item %s \"%s\"\n",
-                        change.getCell(actionCol).getStringCellValue(), change.getCell(fieldCol).getStringCellValue(),
-                        change.getCell(value1Col).getStringCellValue(), item.getCell(idCol).getStringCellValue(),
-                        item.getCell(titleCol).getStringCellValue());
             }
             String id = doAction(change, item);
             if (id != null) {
@@ -638,14 +656,15 @@ public class GroundHog {
         LeanKitAccess lka = new LeanKitAccess(config);
         XSSFSheet iSht = findSheet(change.getCell(itemShtCol).getStringCellValue());
         String boardName = (item.getCell(findColumnFromSheet(iSht, "Board Name")).getStringCellValue());
-        String boardNumber = lka.fetchBoardId(boardName);
+        Board brd = lka.fetchBoard(boardName);
 
-        if (boardNumber == null) {
+        if (brd == null) {
             System.out.printf("Cannot find board with name %s for item on sheet %s, row %d\n", boardName,
                     change.getCell(itemShtCol).getStringCellValue(),
                     (int) change.getCell(rowCol).getNumericCellValue());
             return null;
         }
+        String boardNumber = brd.id;
         /**
          * We need to get the header row for this sheet and work out which columns the
          * fields are in. It is possible that fields could be different between sheets,
@@ -692,7 +711,7 @@ public class GroundHog {
              * 
              */
 
-            Id card = createCard(lka, boardNumber, flds); // Change from human readable to API fields on
+            Id card = createCard(lka, brd, flds); // Change from human readable to API fields on
                                                           // the way
             if (card == null) {
                 System.out.printf("Could not create card on board %s with details: %s", boardNumber,
@@ -711,7 +730,7 @@ public class GroundHog {
             vals.put("value2", convertCells(change, value2Col));
 
             fld.put(change.getCell(fieldCol).getStringCellValue(), vals);
-            Id id = updateCard(lka, boardNumber, card, fld);
+            Id id = updateCard(lka, brd, card, fld);
             if (id == null) {
                 System.out.printf("Could not modify card on board %s with details: %s", boardNumber, fld.toString());
                 System.exit(1);
@@ -746,24 +765,24 @@ public class GroundHog {
                     Date date = change.getCell(col).getDateCellValue();
                     return dtf.format(date).toString();
                 } else {
-                    return (int) change.getCell(col).getNumericCellValue();
+                    return change.getCell(col).getNumericCellValue();
                 }
             }
         }
         return null;
     }
 
-    public Id createCard(LeanKitAccess lka, String bNum, JSONObject fieldLst) {
+    public Id createCard(LeanKitAccess lka, Board brd, JSONObject fieldLst) {
 
-        // First create an empty card and get back the full structure as a string
+        // First create an empty card and get back the full structure 
 
-        Card newCard = lka.createCard(bNum, new JSONObject());
+        Card newCard = lka.createCard(brd.id, new JSONObject());
 
         // If for any reason the network fails, we get a null back.
         if (newCard == null) {
             return null;
         }
-        return updateCard(lka, bNum, newCard, fieldLst);
+        return updateCard(lka, brd, newCard, fieldLst);
     }
 
     // Finds the first one that matches - make sure you don't have multiples of
@@ -791,18 +810,18 @@ public class GroundHog {
         return ln;
     }
 
-    public Id updateCard(LeanKitAccess lka, String bNum, Card card, JSONObject fieldLst) {
+    public Id updateCard(LeanKitAccess lka, Board brd, Card card, JSONObject fieldLst) {
         // Get available types so we can convert type string to typeid string
-        ArrayList<CardType> cTypes = lka.fetchCardTypes(bNum);
-        Lane[] bLanes = lka.fetchLanes(bNum);
+        CardType[] cTypes = brd.cardTypes;
+        Lane[] bLanes = brd.lanes;
 
         JSONObject finalUpdates = new JSONObject();
         if (fieldLst.has("Type")) {
             JSONObject fldVals = (JSONObject) fieldLst.get("Type");
             // Find type in cTypes and add new. If not present, then 'create' will default
-            for (int i = 0; i < cTypes.size(); i++) {
-                if (cTypes.get(i).name.equals(fldVals.get("value1"))) {
-                    finalUpdates.put("typeId", cTypes.get(i).id);
+            for (int i = 0; i < cTypes.length; i++) {
+                if (cTypes[i].name.equals(fldVals.get("value1"))) {
+                    finalUpdates.put("typeId", cTypes[i].id);
                 }
             }
 
@@ -822,10 +841,10 @@ public class GroundHog {
                 case "type": {
                     JSONObject fldVals = (JSONObject) fieldLst.get("Type");
                     // Find type in cTypes and add new. If not present, then 'create' will default
-                    for (int i = 0; i < cTypes.size(); i++) {
-                        if (cTypes.get(i).name.equals(fldVals.get("value1"))) {
+                    for (int i = 0; i < cTypes.length; i++) {
+                        if (cTypes[i].name.equals(fldVals.get("value1"))) {
                             JSONObject result = new JSONObject();
-                            result.put("value1", cTypes.get(i).id);
+                            result.put("value1", cTypes[i].id);
                             finalUpdates.put("typeId", result);
                         }
                     }
@@ -839,7 +858,7 @@ public class GroundHog {
                 case "lane": {
                     String[] lanes = fldValues.get("value1").toString().split("\\|");
                     if (lanes.length == 0) {
-                        System.out.printf("Cannot find lane of name %s on board %s", fldName, bNum);
+                        System.out.printf("Cannot find lane of name %s on board %s", fldName, brd.id);
                         break;
                     }
                     // Get the list of lanes with the topmost parent name
@@ -848,7 +867,7 @@ public class GroundHog {
                     // If too many of these, then barf
                     if (foundLanes.size() > 1) {
                         System.out.printf("Ambiguous lane name %s on board %s", fldValues.get("value1").toString(),
-                                bNum);
+                                brd.id);
                         break;
                     }
                     Lane foundLane = foundLanes.get(0);
@@ -865,7 +884,7 @@ public class GroundHog {
                                 foundLane = foundLanes.get(0);
                             } else {
                                 System.out.printf("Ambiguous lane name %s in path %s on board %s", foundLane.name,
-                                        fldValues.get("value1").toString(), bNum);
+                                        fldValues.get("value1").toString(), brd.id);
                                 break;
                             }
                         } else {
@@ -886,7 +905,7 @@ public class GroundHog {
                     break;
                 }
                 default:
-                    // Make Sure field names from speadsheet are part of the Card model.
+                    // Make Sure field names from speadsheet are part of the Card model.... or....
                     Field[] fld = Card.class.getFields();
                     Boolean fieldFound = false;
                     for (int i = 0; i < fld.length; i++) {
@@ -898,15 +917,30 @@ public class GroundHog {
                     if (fieldFound) {
                         finalUpdates.put(fldName, fieldLst.get(fldName));
                     } else {
-                        System.out.printf("Incorrect field name \"%s\" provided for update on card %s\n", fldName,
+                        // ....see if they are in the customField set
+                        CustomField[] cfld = card.customFields;
+                        for (int i = 0; i < cfld.length; i++) {
+                            if (cfld[i].label.equals(fldName)) {
+                                fieldFound = true;
+                                break;
+                            }
+                        }
+                        if (fieldFound) {
+                            JSONObject result = new JSONObject();
+                            result.put("value1", fldName);
+                            result.put("value2",((JSONObject) fieldLst.get(fldName)).get("value1"));
+                            finalUpdates.put("CustomField", result);
+                        } else {
+                            System.out.printf("Incorrect field name \"%s\" provided for update on card %s\n", fldName,
                                 card.id);
+                        }
                     }
                     break;
             }
 
         }
         Id id = new Id();
-        id.id = lka.updateCardFromId(bNum, card, finalUpdates).id;
+        id.id = lka.updateCardFromId(brd, card, finalUpdates).id;
         return id;
     }
 

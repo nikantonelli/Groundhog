@@ -196,12 +196,12 @@ public class LeanKitAccess {
         return null;
     }
 
-    public ArrayList<Board> fetchBoardFromName(String name) {
+    public ArrayList<Board> fetchBoardsFromName(String name) {
         request = new HttpGet(config.url + "io/board/");
-        URI uri = null;
+        URI uriA = null;
         try {
-            uri = new URIBuilder(request.getURI()).setParameter("search", name).build();
-            ((HttpRequestBase) request).setURI(uri);
+            uriA = new URIBuilder(request.getURI()).setParameter("search", name).build();
+            ((HttpRequestBase) request).setURI(uriA);
         } catch (URISyntaxException e) {
             System.out.println(e.getMessage());
             System.exit(1);
@@ -213,14 +213,26 @@ public class LeanKitAccess {
         return read(Board.class);
     }
 
-    public ArrayList<Board> fetchBoardFromId(String id) {
+    public Board fetchBoardFromId(String id) {
         request = new HttpGet(config.url + "io/board/" + id);
-        return read(Board.class);
+        URI uriB = null;
+        try {
+            uriB = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "true").build();
+            ((HttpRequestBase) request).setURI(uriB);
+        } catch (URISyntaxException e) {
+            System.out.println(e.getMessage());
+            System.exit(1);
+        }
+        ArrayList<Board> results = read(Board.class);
+        if (results != null) {
+            return results.get(0);
+        }
+        return null;
     }
 
-    public String fetchBoardId(String name) {
+    public Board fetchBoard(String name) {
 
-        ArrayList<Board> brd = fetchBoardFromName(name);
+        ArrayList<Board> brd = fetchBoardsFromName(name);
         Board bd = null;
         if (brd.size() > 0) {
             // We found one or more with this name search. First try to find an exact match
@@ -234,7 +246,7 @@ public class LeanKitAccess {
             // Then take the first if that fails
             if (bd == null)
                 bd = brd.get(0);
-            return bd.id;
+            return fetchBoardFromId(bd.id);
         }
         return null;
     }
@@ -343,7 +355,7 @@ public class LeanKitAccess {
         return index;
     }
 
-    public Card updateCardFromId(String bNum, Card card, JSONObject updates) {
+    public Card updateCardFromId(Board brd, Card card, JSONObject updates) {
 
         // Create Leankit updates from the list
         JSONArray jsa = new JSONArray();
@@ -450,6 +462,26 @@ public class LeanKitAccess {
                         upd.put("path", "/assignedUserIds/-");
                         upd.put("value", fetchUserId(values.get("value1").toString()));
                         jsa.put(upd);
+                    }
+                    break;
+                }
+                case "CustomField": {
+                    CustomField[] cflds = brd.customFields;
+                    if (cflds != null) {
+                        for (int i = 0; i < cflds.length; i++) {
+                            if (cflds[i].label.equals(values.get("value1"))){
+                                JSONObject upd = new JSONObject();
+                                JSONObject val = new JSONObject();
+                                
+                                val.put("fieldId", cflds[i].id);
+                                val.put("value", values.get("value2"));
+                                
+                                upd.put("op", "add");
+                                upd.put("path", "/customFields/-");
+                                upd.put("value", val);
+                                jsa.put(upd);
+                            }
+                        }
                     }
                     break;
                 }
