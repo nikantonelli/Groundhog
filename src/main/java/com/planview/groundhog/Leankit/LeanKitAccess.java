@@ -431,6 +431,17 @@ public class LeanKitAccess {
                     }
                     break;
                 }
+                case "externalLink": {
+                    JSONObject link = new JSONObject();
+                    JSONObject upd = new JSONObject();
+                    link.put("label", values.get("value1").toString());
+                    link.put("url", values.get("value2").toString());
+                    upd.put("op", "replace");
+                    upd.put("path", "/externalLink");
+                    upd.put("value", link);
+                    jsa.put(upd);
+                    break;
+                }
                 case "CustomField": {
                     CustomField[] cflds = brd.customFields;
                     if (cflds != null) {

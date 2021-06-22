@@ -8,6 +8,7 @@ import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -52,7 +53,7 @@ public class GroundHog {
     static Boolean useCron = false;
     static String statusFile = "";
     static String moveLane = null;
-    static Boolean deleteItems = false;
+    static String deleteItems = "";
     static Integer updatePeriod = 60 * 60 * 24;
     static Boolean useUpdatePeriod = false;
     static Integer startDay = -1;
@@ -109,11 +110,13 @@ public class GroundHog {
 
                         // Reset file after the time period has expired
                         if (day >= hog.getRefresh()) {
-                            // We need to reset the day to zero
-                            if (cycleOnce == false){
-                                day = 0;
+                            if (deleteItems.equals("cycle")) {
+                                hog.deleteUserItems();
                             }
-                            else {
+                            // We need to reset the day to zero
+                            if (cycleOnce == false) {
+                                day = 0;
+                            } else {
                                 System.out.printf("Completed cycle once as requested");
                                 System.exit(1);
                             }
@@ -130,11 +133,13 @@ public class GroundHog {
                         hog.activity(day++);
                         // Reset file after the time period has expired
                         if (day >= hog.getRefresh()) {
-                            // We need to reset the day to zero
-                            if (cycleOnce == false){
-                                day = 0;
+                            if (deleteItems.equals("cycle")) {
+                                hog.deleteUserItems();
                             }
-                            else {
+                            // We need to reset the day to zero
+                            if (cycleOnce == false) {
+                                day = 0;
+                            } else {
                                 System.out.printf("Completed cycle once as requested");
                                 System.exit(1);
                             }
@@ -241,12 +246,12 @@ public class GroundHog {
         opts.addOption(updateRate);
         Option beginDay = new Option("b", "begin", true, "Day to begin updates. Defaults to day 0");
         beginDay.setRequired(false);
-        opts.addOption(beginDay); 
+        opts.addOption(beginDay);
         Option doOnce = new Option("o", "once", false, "Run updates from Day 0 to end only once (do not loop)");
         doOnce.setRequired(false);
         opts.addOption(doOnce);
         // TODO: What about making this delete all the non-groundhog cards
-        Option deleteCycle = new Option("d", "delete", false, "Delete all artifacts on end of cycle");
+        Option deleteCycle = new Option("d", "delete", true, "Delete all artifacts on start of day or end of cycle");
         deleteCycle.setRequired(false);
         opts.addOption(deleteCycle);
 
@@ -285,11 +290,14 @@ public class GroundHog {
         if (cl.hasOption("move")) {
             moveLane = cl.getOptionValue("move");
         }
-        
+
         if (cl.hasOption("once")) {
             cycleOnce = true;
         }
-        deleteItems = cl.hasOption("delete");
+
+        if (cl.hasOption("delete")) {
+            deleteItems = cl.getOptionValue("delete");
+        }
 
     }
 
@@ -479,7 +487,7 @@ public class GroundHog {
     Integer value1Col = null;
     Integer value2Col = null;
 
-    Integer findColumnFromSheet(XSSFSheet sht, String name) {
+    private Integer findColumnFromSheet(XSSFSheet sht, String name) {
         Iterator<Row> row = sht.iterator();
         if (!row.hasNext()) {
             return null;
@@ -490,6 +498,32 @@ public class GroundHog {
             return null;
         }
         return col;
+    }
+
+     private void deleteUserItems() {
+
+        // Collate all the boards in the items sheets and get their IDs
+        // For each board, get the cards and check whether we have an ID that matches a
+        // row in the items
+        ArrayList<String> bLst = new ArrayList<>(); //Boards we have
+        ArrayList<String> cLst = new ArrayList<>(); //Card list we have
+        Iterator<Row> row = changesSht.iterator();
+        
+        row.next(); //Skip header
+        while (row.hasNext()) {
+            Row change = row.next();
+            XSSFSheet iSht = findSheet(change.getCell(itemShtCol).getStringCellValue());
+            Row item = iSht.getRow((int) (change.getCell(rowCol).getNumericCellValue() - 1));
+            String boardName = (item.getCell(findColumnFromSheet(iSht, "Board Name")).getStringCellValue());
+            String cardId = (item.getCell(findColumnFromSheet(iSht, "ID")).getStringCellValue());
+            if (!bLst.contains(boardName)){
+                bLst.add(boardName);
+            }
+
+            if (!cLst.contains(cardId)){
+                cLst.add(cardId);
+            }    
+        }
     }
 
     private void activity(Integer day) throws IOException, InterruptedException {
@@ -519,6 +553,10 @@ public class GroundHog {
             if (tr.getCell(dayCol).getNumericCellValue() == day) {
                 todaysChanges.add(tr);
             }
+        }
+
+        if (deleteItems.equals("day")) {
+            deleteUserItems();
         }
 
         if (todaysChanges.size() == 0) {
@@ -602,6 +640,9 @@ public class GroundHog {
                 System.out.printf("Create item %s on board \"%s\"\n", item.getCell(titleCol).getStringCellValue(),
                         item.getCell(boardCol).getStringCellValue());
             }
+            else {
+                System.out.printf(".");
+            }
             String id = doAction(change, item);
             if (id != null) {
                 changeMade = true;
@@ -615,6 +656,7 @@ public class GroundHog {
                 System.out.println("Got null back from doAction(). Seek help!");
             }
         }
+        System.out.printf("\n");
         if (changeMade) {
             Integer loopCnt = 12;
             while (loopCnt > 0) {
@@ -717,7 +759,7 @@ public class GroundHog {
              */
 
             Id card = createCard(lka, brd, flds); // Change from human readable to API fields on
-                                                          // the way
+                                                  // the way
             if (card == null) {
                 System.out.printf("Could not create card on board %s with details: %s", boardNumber,
                         fieldLst.toString());
@@ -777,9 +819,9 @@ public class GroundHog {
         return null;
     }
 
-    public Id createCard(LeanKitAccess lka, Board brd, JSONObject fieldLst) {
+    private Id createCard(LeanKitAccess lka, Board brd, JSONObject fieldLst) {
 
-        // First create an empty card and get back the full structure 
+        // First create an empty card and get back the full structure
 
         Card newCard = lka.createCard(brd.id, new JSONObject());
 
@@ -815,7 +857,7 @@ public class GroundHog {
         return ln;
     }
 
-    public Id updateCard(LeanKitAccess lka, Board brd, Card card, JSONObject fieldLst) {
+    private Id updateCard(LeanKitAccess lka, Board brd, Card card, JSONObject fieldLst) {
         // Get available types so we can convert type string to typeid string
         CardType[] cTypes = brd.cardTypes;
         Lane[] bLanes = brd.lanes;
@@ -933,11 +975,11 @@ public class GroundHog {
                         if (fieldFound) {
                             JSONObject result = new JSONObject();
                             result.put("value1", fldName);
-                            result.put("value2",((JSONObject) fieldLst.get(fldName)).get("value1"));
+                            result.put("value2", ((JSONObject) fieldLst.get(fldName)).get("value1"));
                             finalUpdates.put("CustomField", result);
                         } else {
                             System.out.printf("Incorrect field name \"%s\" provided for update on card %s\n", fldName,
-                                card.id);
+                                    card.id);
                         }
                     }
                     break;
