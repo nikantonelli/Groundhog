@@ -28,6 +28,7 @@ The program will attempt to prompt you on how to build the right info in the spr
 
 (-m and -d not implemented yet)
 
+## Example command line
 java -jar target\Groundhog-1.0-SNAPSHOT-spring-boot.jar -f "Scrum Teams.xlsx" -c -s a.txt
 
 If you do not use the -c option then the program will attempt to sit in a sleep loop being woken up every (24 hours at) 3 in the morning.
