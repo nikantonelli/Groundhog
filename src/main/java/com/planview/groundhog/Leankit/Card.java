@@ -4,7 +4,7 @@ import java.util.Date;
 
 public class Card {
     public String id, title, typeId, description, laneId, mirrorSourceCardId, copiedFromCardId, 
-            blockReason, priority, subscriptionId, version,
+            blockReason, priority, subscriptionId, version, containingCardId,
             customIconId, customIconLabel, iconPath, color, wipOverrideComment;
     public CustomId customId;
     public Connections connections;

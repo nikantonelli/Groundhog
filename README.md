@@ -27,10 +27,11 @@ The program will attempt to prompt you on how to build the right info in the spr
 -u            'day' update rate in seconds. Must be used without '-c' option. A rate of zero seconds will 
               make the code wait for user input before going to a days updates
 
+-d <mode>     delete all user created cards (not from spreadsheet) where mode is 'day' (at the start of every day processing), 'cycle' (at the end of the cycle)
+
 ## Not implemented yet:
 -m <lane>     move all cards to this lane at end of cycle
 
--d <mode>     delete all user created cards (not from spreadsheet) where mode is 'day' (at the start of every day processing), 'cycle' (at the end of the cycle)
 
 ## Example command line
 java -jar target\Groundhog-1.0-SNAPSHOT-spring-boot.jar -f "Scrum Teams.xlsx" -c -s a.txt

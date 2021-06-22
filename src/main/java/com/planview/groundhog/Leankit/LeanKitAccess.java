@@ -14,6 +14,7 @@ import com.planview.groundhog.Configuration;
 
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPatch;
 import org.apache.http.client.methods.HttpPost;
@@ -69,6 +70,9 @@ public class LeanKitAccess {
                         break;
                     case "User":
                         fieldName = "users";
+                        break;
+                    case "Card":
+                        fieldName = "cards";
                         break;
                     default:
                         System.out.println("Incorrect item type returned from server API");
@@ -169,8 +173,10 @@ public class LeanKitAccess {
                 String creds = config.username + ":" + config.password;
                 request.addHeader("Authorization", "Basic " + Base64.encode(creds.getBytes()));
             }
-            httpResponse = client.execute(request); // Get a json string back
-            result = EntityUtils.toString(httpResponse.getEntity());
+            httpResponse = client.execute(request);
+            if ( httpResponse.getStatusLine().getStatusCode() != 204) {  // Get a json string back
+                result = EntityUtils.toString(httpResponse.getEntity());
+            }
         } catch (IOException e) {
             System.out.println(e.getMessage());
             System.exit(1);
@@ -211,6 +217,30 @@ public class LeanKitAccess {
         // shouldn't max
         // out memory.
         return read(Board.class);
+    }
+
+    public void deleteCards(ArrayList<Card> cards){
+        for (int i = 0; i < cards.size(); i++) {
+            request = new HttpDelete(config.url + "io/card/"+cards.get(i).id);
+            processRequest();
+        }
+    }
+
+    public ArrayList<Card> fetchCardsFromBoard(String id) {
+        request = new HttpGet(config.url + "io/card");
+        URI uriA = null;
+        try {
+            uriA = new URIBuilder(request.getURI()).setParameter("board", id).build();
+            ((HttpRequestBase) request).setURI(uriA);
+        } catch (URISyntaxException e) {
+            System.out.println(e.getMessage());
+            System.exit(1);
+        }
+
+        // Once you get the boards, you could cache them. There may be loads, but
+        // shouldn't max
+        // out memory.
+        return read(Card.class);
     }
 
     public Board fetchBoardFromId(String id) {

@@ -500,30 +500,108 @@ public class GroundHog {
         return col;
     }
 
-     private void deleteUserItems() {
+    private void deleteUserItems() {
 
         // Collate all the boards in the items sheets and get their IDs
         // For each board, get the cards and check whether we have an ID that matches a
         // row in the items
-        ArrayList<String> bLst = new ArrayList<>(); //Boards we have
-        ArrayList<String> cLst = new ArrayList<>(); //Card list we have
+        ArrayList<String> bLst = new ArrayList<>(); // Boards we have
+        ArrayList<String> cLst = new ArrayList<>(); // Card list we have
         Iterator<Row> row = changesSht.iterator();
-        
-        row.next(); //Skip header
+
+        row.next(); // Skip header
         while (row.hasNext()) {
             Row change = row.next();
             XSSFSheet iSht = findSheet(change.getCell(itemShtCol).getStringCellValue());
             Row item = iSht.getRow((int) (change.getCell(rowCol).getNumericCellValue() - 1));
             String boardName = (item.getCell(findColumnFromSheet(iSht, "Board Name")).getStringCellValue());
             String cardId = (item.getCell(findColumnFromSheet(iSht, "ID")).getStringCellValue());
-            if (!bLst.contains(boardName)){
+            if (!bLst.contains(boardName)) {
                 bLst.add(boardName);
             }
 
-            if (!cLst.contains(cardId)){
+            if ((cardId != "") && (cardId != null) && !cLst.contains(cardId)) {
                 cLst.add(cardId);
-            }    
+            }
         }
+        if ((bLst.size() == 0) || (cLst.size() == 0)) {
+            return;
+        }
+        LeanKitAccess lka = new LeanKitAccess(config);
+        Iterator<String> bIter = bLst.iterator();
+        ArrayList<Card> leftOvers = new ArrayList<>();
+        while (bIter.hasNext()) {
+            String bName = bIter.next();
+            Board brd = lka.fetchBoard(bName);
+            ArrayList<Card> cards = lka.fetchCardsFromBoard(brd.id);
+            if (cards != null) {
+                Iterator<Card> cIter = cards.iterator();
+                while (cIter.hasNext()) {
+                    Card cd = cIter.next();
+                    if (cLst.contains(cd.id)) {
+                        cards.remove(cd);
+                        cIter = cards.iterator();
+                    }
+                }
+                leftOvers.addAll(cards);
+            }
+        }
+        // Should now have a list of cards that are not ours
+        lka.deleteCards(leftOvers);
+        System.out.println("Done");
+    }
+
+    private void moveOurItems() {
+
+        // Collate all the boards in the items sheets and get their IDs
+        // For each board, get the cards and check whether we have an ID that matches a
+        // row in the items
+        ArrayList<String> bLst = new ArrayList<>(); // Boards we have
+        ArrayList<String> cLst = new ArrayList<>(); // Card list we have
+        Iterator<Row> row = changesSht.iterator();
+
+        row.next(); // Skip header
+        while (row.hasNext()) {
+            Row change = row.next();
+            XSSFSheet iSht = findSheet(change.getCell(itemShtCol).getStringCellValue());
+            Row item = iSht.getRow((int) (change.getCell(rowCol).getNumericCellValue() - 1));
+            String boardName = (item.getCell(findColumnFromSheet(iSht, "Board Name")).getStringCellValue());
+            String cardId = (item.getCell(findColumnFromSheet(iSht, "ID")).getStringCellValue());
+            if (!bLst.contains(boardName)) {
+                bLst.add(boardName);
+            }
+
+            if ((cardId != "") && (cardId != null) && !cLst.contains(cardId)) {
+                cLst.add(cardId);
+            }
+        }
+        if ((bLst.size() == 0) || (cLst.size() == 0)) {
+            return;
+        }
+
+        //Got a list of card ids. Now move them to the lane 
+        // LeanKitAccess lka = new LeanKitAccess(config);
+        // Iterator<String> bIter = bLst.iterator();
+        // ArrayList<Card> leftOvers = new ArrayList<>();
+        // while (bIter.hasNext()) {
+        //     String bName = bIter.next();
+        //     Board brd = lka.fetchBoard(bName);
+        //     ArrayList<Card> cards = lka.fetchCardsFromBoard(brd.id);
+        //     if (cards != null) {
+        //         Iterator<Card> cIter = cards.iterator();
+        //         while (cIter.hasNext()) {
+        //             Card cd = cIter.next();
+        //             if (cLst.contains(cd.id)) {
+        //                 cards.remove(cd);
+        //                 cIter = cards.iterator();
+        //             }
+        //         }
+        //         leftOvers.addAll(cards);
+        //     }
+        // }
+        // // Should now have a list of cards that are not ours
+        // lka.deleteCards(leftOvers);
+        // System.out.println("Done");
     }
 
     private void activity(Integer day) throws IOException, InterruptedException {
@@ -639,8 +717,7 @@ public class GroundHog {
             if (change.getCell(actionCol).getStringCellValue().equals("Create")) {
                 System.out.printf("Create item %s on board \"%s\"\n", item.getCell(titleCol).getStringCellValue(),
                         item.getCell(boardCol).getStringCellValue());
-            }
-            else {
+            } else {
                 System.out.printf(".");
             }
             String id = doAction(change, item);
