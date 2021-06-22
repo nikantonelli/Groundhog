@@ -16,17 +16,21 @@ The program will attempt to prompt you on how to build the right info in the spr
 
 ## Command Line Options
 
--f      the XLSX spreadsheet to read from
+-f <file>     the XLSX spreadsheet to read from
 
--c      use this if the program is to be repetitively called by a cron job (needs -s option)
+-c            use this if the program is to be repetitively called by a cron job (needs -s option)
 
--s      the name of the status file to use to keep track of what day the program is on when using the -c option
+-s <file>     the name of the status file to use to keep track of what day the program is on when using the -c option
 
--o      run through the list once
+-o            run through the list once
 
--u      'day' update rate in seconds. Must be used without '-c' option. A rate of zero seconds will make the code wait for user input before going to a days updates
+-u            'day' update rate in seconds. Must be used without '-c' option. A rate of zero seconds will 
+              make the code wait for user input before going to a days updates
 
-(-m and -d not implemented yet)
+## Not implemented yet:
+-m <lane>     move all cards to this lane at end of cycle
+
+-d <mode>     delete all user created cards (not from spreadsheet) where mode is 'day' (at the start of every day processing), 'cycle' (at the end of the cycle)
 
 ## Example command line
 java -jar target\Groundhog-1.0-SNAPSHOT-spring-boot.jar -f "Scrum Teams.xlsx" -c -s a.txt
