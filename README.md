@@ -6,7 +6,7 @@ An attempt to illustrate the progression of stories across a LeanKit board over 
 
 ## Setup
 
-The program can be run as a long term command line program, or as one that is called periodically as a cron job. The program requires a spreadsheet to list the changes that you want to make.
+The program can be run as a command line program, or as one that is called periodically as a cron job. The program requires a spreadsheet to list the changes that you want to make.
 
 If you just list the changes as a list of 'Create' entries, then effectively you have a card importer (make sure you use the '-o' option). Bear in mind that this was not written for that purpose and might be a little awkward in use.
 
