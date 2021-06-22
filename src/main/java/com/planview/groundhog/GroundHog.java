@@ -54,6 +54,7 @@ public class GroundHog {
     static String moveLane = null;
     static Boolean deleteItems = false;
     static Integer updatePeriod = 60 * 60 * 24;
+    static Boolean useUpdatePeriod = false;
     static Integer startDay = -1;
     static Boolean cycleOnce = false;
 
@@ -97,10 +98,13 @@ public class GroundHog {
                         hog.activity(day++);
                         Calendar now = Calendar.getInstance();
                         Calendar then = Calendar.getInstance();
-                        then.add(Calendar.SECOND, updatePeriod);
-                        // then.set(Calendar.HOUR_OF_DAY, 3); // Set to three in the morning
-                        // then.set(Calendar.MINUTE, 0);
-                        // then.set(Calendar.SECOND, 0);
+                        if (useUpdatePeriod) {
+                            then.add(Calendar.SECOND, updatePeriod);
+                        } else {
+                            then.set(Calendar.HOUR_OF_DAY, 3); // Set to three in the morning
+                            then.set(Calendar.MINUTE, 0);
+                            then.set(Calendar.SECOND, 0);
+                        }
                         Long timeDiff = then.getTimeInMillis() - now.getTimeInMillis();
 
                         // Reset file after the time period has expired
@@ -269,6 +273,7 @@ public class GroundHog {
 
         if (cl.hasOption("update")) {
             useCron = false;
+            useUpdatePeriod = true;
             updatePeriod = Integer.parseInt(cl.getOptionValue("update"));
         }
 
