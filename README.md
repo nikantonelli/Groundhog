@@ -45,7 +45,7 @@ The Day Delta is the day from the start of the program that you want the change 
 
 ## Artifact Info
 
-The other sheets that require artifact definitions can have any number of plain fields defined for the creation event. The first two columns must have titles ID and 'Board Name'. The ID is blank at the start and when the artifact is created, the program wil write the id of the one created back into the ID field. The 'Board Name' is obviously where the artifact resides. The ID can be used for further updates (e.g. add Parent)
+The other sheets that require artifact definitions can have any number of plain fields defined for the creation event. The first two columns must have titles ID and 'Board Name'. The ID is blank at the start and when the artifact is created, the program wil write the id of the one created back into the ID field. The 'Board Name' is obviously where the artifact resides. The ID can be used for further updates (e.g. add Parent). If you want to re-run the create, then just delete the ID field contents for that row and run the command to go through for just the 'day' that is set for that row. You can set the row to 99 and then run with the options "-f <filename> -u 0 -b 99 " to run it manually.
 
 If you put a field in that is not part of the standard Card field set, then it is checked in the list of Custom Fields for the board. At the moment, the type of Custom field is not checked, so might barf at some point. Log an issue if something doesn't work.
 
