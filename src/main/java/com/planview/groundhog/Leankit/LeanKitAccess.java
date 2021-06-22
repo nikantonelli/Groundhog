@@ -442,17 +442,34 @@ public class LeanKitAccess {
                     jsa.put(upd);
                     break;
                 }
+                case "customIcon": {
+                    if (brd.classOfServiceEnabled) {
+                        if (brd.classesOfService != null) {
+                            for (int i = 0; i < brd.classesOfService.length; i++) {
+                                if (brd.classesOfService[i].name.equals(values.get("value1"))) {
+                                    JSONObject upd = new JSONObject();
+                                    upd.put("op", "replace");
+                                    upd.put("path", "/customIconId");
+                                    upd.put("value", brd.classesOfService[i].id);
+                                    jsa.put(upd);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
                 case "CustomField": {
                     CustomField[] cflds = brd.customFields;
                     if (cflds != null) {
                         for (int i = 0; i < cflds.length; i++) {
-                            if (cflds[i].label.equals(values.get("value1"))){
+                            if (cflds[i].label.equals(values.get("value1"))) {
                                 JSONObject upd = new JSONObject();
                                 JSONObject val = new JSONObject();
-                                
+
                                 val.put("fieldId", cflds[i].id);
                                 val.put("value", values.get("value2"));
-                                
+
                                 upd.put("op", "add");
                                 upd.put("path", "/customFields/-");
                                 upd.put("value", val);
