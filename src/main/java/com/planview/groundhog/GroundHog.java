@@ -44,6 +44,8 @@ import org.json.JSONObject;
 
 public class GroundHog {
 
+    static Boolean debugPrint = false;
+
     Integer refreshPeriod = 14; // Number of days to run for by default
     Configuration config = new Configuration();
     String xlsxfn = "";
@@ -119,18 +121,18 @@ public class GroundHog {
                             if (cycleOnce == false) {
                                 day = 0;
                             } else {
-                                System.out.printf("Completed cycle once as requested");
+                                dpf("Completed cycle once as requested");
                                 System.exit(1);
                             }
                         }
-                        System.out.println("Sleeping until: " + then.getTime());
+                        dpf("%s\n","Sleeping until: " + then.getTime());
                         Thread.sleep(timeDiff);
                     } else {
                         // Wait for a user input to continue
 
                         System.out.printf("Hit <CR> to continue to day %d... ", day);
                         String line = scanner.nextLine();
-                        System.out.printf(line); // Do this so that the compiler doesn't remove the unused 'line'
+                        System.out.println(line); // Do this so that the compiler doesn't remove the unused 'line'
                         // Do todays activity and then sleep
                         hog.activity(day++);
                         // Reset file after the time period has expired
@@ -144,13 +146,13 @@ public class GroundHog {
                             if (cycleOnce == false) {
                                 day = 0;
                             } else {
-                                System.out.printf("Completed cycle once as requested");
+                                dpf("Completed cycle once as requested");
                                 System.exit(1);
                             }
                         }
                     }
                 } catch (InterruptedException e) {
-                    System.out.println("Early wake from daily timer");
+                    dpf("%s","Early wake from daily timer");
                     System.exit(1);
                 }
 
@@ -210,7 +212,7 @@ public class GroundHog {
                 }
 
             } catch (IOException e) {
-                System.out.println(e.getMessage()); // Any other error, we barf.
+                dpf("%s",e.getMessage()); // Any other error, we barf.
                 System.exit(1);
             }
 
@@ -229,7 +231,7 @@ public class GroundHog {
             fos.flush();
             fos.close();
         } catch (IOException e) {
-            System.out.println(e.getMessage());
+            dpf("%s",e.getMessage());
             System.exit(1);
         }
     }
@@ -261,6 +263,10 @@ public class GroundHog {
         Option moveCycle = new Option("m", "move", true, "Move all artifacts on end of cycle to this lane");
         moveCycle.setRequired(false);
         opts.addOption(moveCycle);
+        
+        Option dbp = new Option("x", "debug", false, "Print out loads of helpful stuff");
+        dbp.setRequired(false);
+        opts.addOption(dbp);
 
         CommandLineParser p = new DefaultParser();
         HelpFormatter hf = new HelpFormatter();
@@ -268,7 +274,7 @@ public class GroundHog {
         try {
             cl = p.parse(opts, args);
         } catch (ParseException e) {
-            System.out.println(e.getMessage());
+            dpf("%s",e.getMessage());
             hf.printHelp(" ", opts);
             System.exit(1);
         }
@@ -302,6 +308,8 @@ public class GroundHog {
             deleteItems = cl.getOptionValue("delete");
         }
 
+        debugPrint = cl.hasOption("debug");
+
     }
 
     /**
@@ -313,7 +321,7 @@ public class GroundHog {
         try {
             xlsxfis = new FileInputStream(new File(xlsxfn));
         } catch (FileNotFoundException e) {
-            System.out.println(e.getMessage());
+            dpf("%s",e.getMessage());
 
             System.exit(1);
 
@@ -322,7 +330,7 @@ public class GroundHog {
             wb = new XSSFWorkbook(xlsxfis);
             xlsxfis.close();
         } catch (IOException e) {
-            System.out.println(e.getMessage());
+            dpf("%s",e.getMessage());
             System.exit(1);
         }
 
@@ -334,7 +342,7 @@ public class GroundHog {
 
         Integer shtCount = wb.getNumberOfSheets();
         if ((shtCount < 3) || (configSht == null) || (changesSht == null)) {
-            System.out.println(
+            dpf("%s",
                     "Did not detect correct sheets in the spreadsheet: \"Config\",\"Changes\" and one, or more, board(s)");
             System.exit(1);
         }
@@ -374,7 +382,7 @@ public class GroundHog {
         // Assume that the titles are the first row
         Iterator<Row> ri = configSht.iterator();
         if (!ri.hasNext()) {
-            System.out.println("Did not detect any header info on Config sheet (first row!)");
+            dpf("%s","Did not detect any header info on Config sheet (first row!)");
             System.exit(1);
         }
         Row hdr = ri.next();
@@ -390,12 +398,12 @@ public class GroundHog {
         }
 
         if (fieldMap.size() != cols.size()) {
-            System.out.println("Did not detect correct columns on Config sheet: " + cols.toString());
+            dpf("%s","Did not detect correct columns on Config sheet: " + cols.toString());
             System.exit(1);
         }
 
         if (!ri.hasNext()) {
-            System.out.println(
+            dpf("%s",
                     "Did not detect any field info on Config sheet (first cell must be non-blank, e.g. url to a real host)");
             System.exit(1);
         }
@@ -434,7 +442,7 @@ public class GroundHog {
                         }
 
                     } catch (IllegalArgumentException | IllegalAccessException e) {
-                        System.out.println(e.getMessage());
+                        dpf("%s",e.getMessage());
                         System.exit(1);
                     }
 
@@ -452,7 +460,7 @@ public class GroundHog {
          **/
 
         if ((config.apikey == null) && ((config.username == null) || (config.password == null))) {
-            System.out.println("Did not detect enough user info: apikey or username/password pair");
+            dpf("%s","Did not detect enough user info: apikey or username/password pair");
             System.exit(1);
         }
         if ((config.cyclelength != null) && (config.cyclelength.intValue() != 0)) {
@@ -515,10 +523,21 @@ public class GroundHog {
         row.next(); // Skip header
         while (row.hasNext()) {
             Row change = row.next();
+
+             //XLS Spreadsheets are horrible!
+            if ((change.getCell(itemShtCol) == null) || (change.getCell(rowCol) == null) ) {
+                continue;
+            }
             XSSFSheet iSht = findSheet(change.getCell(itemShtCol).getStringCellValue());
             Row item = iSht.getRow((int) (change.getCell(rowCol).getNumericCellValue() - 1));
+            if (item.getCell(findColumnFromSheet(iSht, "Board Name")) == null){
+                continue;
+            }
             String boardName = (item.getCell(findColumnFromSheet(iSht, "Board Name")).getStringCellValue());
-            String cardId = (item.getCell(findColumnFromSheet(iSht, "ID")).getStringCellValue());
+            String cardId = "";
+            if (item.getCell(findColumnFromSheet(iSht, "ID")) != null) {
+                cardId = item.getCell(findColumnFromSheet(iSht, "ID")).getStringCellValue();
+            }
             if (!bLst.contains(boardName)) {
                 bLst.add(boardName);
             }
@@ -530,7 +549,7 @@ public class GroundHog {
         if ((bLst.size() == 0) || (cLst.size() == 0)) {
             return;
         }
-        LeanKitAccess lka = new LeanKitAccess(config);
+        LeanKitAccess lka = new LeanKitAccess(config, debugPrint);
         Iterator<String> bIter = bLst.iterator();
         ArrayList<Card> leftOvers = new ArrayList<>();
         while (bIter.hasNext()) {
@@ -551,17 +570,21 @@ public class GroundHog {
         }
         // Should now have a list of cards that are not ours
         lka.deleteCards(leftOvers);
-        System.out.printf("Deleted %d %s\n", leftOvers.size(), (leftOvers.size() != 1) ? "cards" : "card");
+        dpf("Deleted %d %s\n", leftOvers.size(), (leftOvers.size() != 1) ? "cards" : "card");
     }
 
     private void moveOurItems() {
-        LeanKitAccess lka = new LeanKitAccess(config);
+        LeanKitAccess lka = new LeanKitAccess(config, debugPrint);
         Iterator<Row> row = changesSht.iterator();
 
         Boolean changeMade = false;
         row.next(); // Skip header
         while (row.hasNext()) {
             Row change = row.next();
+            //XLS Spreadsheets are horrible!
+            if ((change.getCell(itemShtCol) == null) || (change.getCell(rowCol) == null) ) {
+                continue;
+            }
             XSSFSheet iSht = findSheet(change.getCell(itemShtCol).getStringCellValue());
             Row item = iSht.getRow((int) (change.getCell(rowCol).getNumericCellValue() - 1));
             String boardName = (item.getCell(findColumnFromSheet(iSht, "Board Name")).getStringCellValue());
@@ -578,7 +601,7 @@ public class GroundHog {
             Board brd = lka.fetchBoard(boardName);
             Card card = lka.fetchCard(cardId);
             if (brd == null) {
-                System.out.printf("Could not locate board %s\n", boardName);
+                dpf("Could not locate board %s\n", boardName);
                 System.exit(1);
             }
 
@@ -589,8 +612,10 @@ public class GroundHog {
             fld.put("Lane", vals);
             Id id = updateCard(lka, brd, card, fld);
             if (id == null) {
-                System.out.printf("Could not move card %s, on board %s to lane %s\n", cardId, boardName, moveLane);
+                dpf("Could not move card %s, on board \"%s\" to lane \"%s\"\n", cardId, boardName, moveLane);
                 System.exit(1);
+            } else {
+                dpf("Moved card %s, on board \"%s\" to lane \"%s\"\n", cardId, boardName, moveLane);
             }
             // Now that the item is moved, delete the ID from the item row so we can create
             // new ones the next time around
@@ -599,6 +624,12 @@ public class GroundHog {
         }
         //Only do this the once
         if (changeMade) writeFile();
+    }
+
+    private static void dpf(String fmt, Object...parms){
+        if (debugPrint){
+            System.out.printf(fmt, parms);
+        }
     }
 
     private void activity(Integer day) throws IOException, InterruptedException {
@@ -616,7 +647,7 @@ public class GroundHog {
 
         if ((dayCol == null) || (itemShtCol == null) || (rowCol == null) || (actionCol == null) || (fieldCol == null)
                 || (value1Col == null) || (value2Col == null)) {
-            System.out.printf(
+            dpf(
                     "Could not find all required columns in %s sheet: \"Day Delta\", \"Item Sheet\", \"Item Row\", \"Action\", \"Field\", \"Value1\", \"Value2\"\n",
                     changesSht.getSheetName());
             System.exit(1);
@@ -624,10 +655,13 @@ public class GroundHog {
         // Nw add the rows of today to an array
         row.next(); // Skip first row with headers
         while (row.hasNext()) {
+            
             Row tr = row.next();
+            if (tr.getCell(dayCol) != null){
             if (tr.getCell(dayCol).getNumericCellValue() == day) {
                 todaysChanges.add(tr);
             }
+        }
         }
 
         if (deleteItems.equals("day")) {
@@ -635,10 +669,10 @@ public class GroundHog {
         }
 
         if (todaysChanges.size() == 0) {
-            System.out.printf("No actions to take on day %d\n", day);
+            dpf("No actions to take on day %d\n", day);
             return;
         } else {
-            System.out.printf("%d actions to take on day %d\n", todaysChanges.size(), day);
+            dpf("%d actions to take on day %d\n", todaysChanges.size(), day);
         }
 
         // Now scan through the changes doing the actions
@@ -651,7 +685,7 @@ public class GroundHog {
             // First check the validity of the info
             if ((change.getCell(itemShtCol) == null) || (change.getCell(rowCol) == null)
                     || (change.getCell(actionCol) == null)) {
-                System.out.printf("Cannot decode change info in row \"%d\" - skipping\n", change.getRowNum());
+                dpf("Cannot decode change info in row \"%d\" - skipping\n", change.getRowNum());
                 continue;
             }
             XSSFSheet iSht = findSheet(change.getCell(itemShtCol).getStringCellValue());
@@ -663,7 +697,7 @@ public class GroundHog {
             item = iSht.getRow((int) (change.getCell(rowCol).getNumericCellValue() - 1));
 
             if ((idCol == null) || (titleCol == null)) {
-                System.out.printf("Cannot locate \"ID\" and \"title\" columns needed in sheet \"%s\" - skipping\n",
+                dpf("Cannot locate \"ID\" and \"title\" columns needed in sheet \"%s\" - skipping\n",
                         iSht.getSheetName());
                 continue;
             }
@@ -671,7 +705,7 @@ public class GroundHog {
             // Check board name is present for a Create
             if ((change.getCell(actionCol).getStringCellValue().equals("Create")) && ((boardCol == null)
                     || (item.getCell(boardCol) == null) || (item.getCell(boardCol).getStringCellValue().isEmpty()))) {
-                System.out.printf(
+                dpf(
                         "Cannot locate \"Board Name\" column needed in sheet \"%s\"  for a Create - skipping\n",
                         iSht.getSheetName());
                 continue;
@@ -680,14 +714,14 @@ public class GroundHog {
             // Check title is present for a Create
             if ((change.getCell(actionCol).getStringCellValue().equals("Create"))
                     && ((item.getCell(titleCol) == null) || (item.getCell(titleCol).getStringCellValue().isEmpty()))) {
-                System.out.printf(
+                dpf(
                         "Required \"title\" column/data missing in sheet \"%s\", row: %d for a Create - skipping\n",
                         iSht.getSheetName(), item.getRowNum());
                 continue;
             }
 
             if ((typeCol == null) || (item.getCell(typeCol) == null)) {
-                System.out.printf("Cannot locate \"Type\" column on row:  %d  - using default for board\n",
+                dpf("Cannot locate \"Type\" column on row:  %d  - using default for board\n",
                         item.getRowNum());
             }
 
@@ -695,7 +729,7 @@ public class GroundHog {
             if ((item.getCell(idCol) == null) || (item.getCell(idCol).getStringCellValue() == "")) {
                 // Check if this is a 'create' operation. If not, ignore and continue past.
                 if (!change.getCell(actionCol).getStringCellValue().equals("Create")) {
-                    System.out.printf("Ignoring action \"%s\" on item \"%s\" (no ID present in row: %d)\n",
+                    dpf("Ignoring action \"%s\" on item \"%s\" (no ID present in row: %d)\n",
                             change.getCell(actionCol).getStringCellValue(), item.getCell(titleCol).getStringCellValue(),
                             item.getRowNum());
                     continue; // Break out and try next change
@@ -703,7 +737,7 @@ public class GroundHog {
             } else {
                 // Check if this is a 'create' operation. If it is, ignore and continue past.
                 if (change.getCell(actionCol).getStringCellValue().equals("Create")) {
-                    System.out.printf(
+                    dpf(
                             "Ignoring action \"%s\" on item \"%s\" (attempting create on existing ID in row: %d)\n",
                             change.getCell(actionCol).getStringCellValue(), item.getCell(titleCol).getStringCellValue(),
                             item.getRowNum());
@@ -712,10 +746,10 @@ public class GroundHog {
 
             }
             if (change.getCell(actionCol).getStringCellValue().equals("Create")) {
-                System.out.printf("Create item %s on board \"%s\"\n", item.getCell(titleCol).getStringCellValue(),
+                dpf("Create card \"%s\" on board \"%s\"\n", item.getCell(titleCol).getStringCellValue(),
                         item.getCell(boardCol).getStringCellValue());
             } else {
-                System.out.printf(".");
+                dpf(".");
             }
             String id = doAction(change, item);
             if (id != null) {
@@ -727,10 +761,10 @@ public class GroundHog {
                 item.getCell(idCol).setCellValue(id);
                 XSSFFormulaEvaluator.evaluateAllFormulaCells(wb);
             } else {
-                System.out.println("Got null back from doAction(). Seek help!\n");
+                dpf("%s","Got null back from doAction(). Seek help!\n");
             }
         }
-        System.out.printf("\n"); //Finish up the dotting.....
+        dpf("\n"); //Finish up the dotting.....
         if (changeMade) {
             writeFile();
         }
@@ -750,14 +784,14 @@ public class GroundHog {
                         oStr = null;
                         loopCnt = 0;
                     } catch (IOException e) {
-                        System.out.printf("Error %s while closing file %s\n", e, xlsxfn);
+                        dpf("Error %s while closing file %s\n", e, xlsxfn);
                     }
                 } catch (IOException e) {
-                    System.out.printf("Error %s while writing file %s\n", e, xlsxfn);
+                    dpf("Error %s while writing file %s\n", e, xlsxfn);
                     oStr.close(); // If this fails, just give up!
                 }
             } catch (IOException e) {
-                System.out.printf("Error %s while opening/closing file %s\n", e, xlsxfn);
+                dpf("Error %s while opening/closing file %s\n", e, xlsxfn);
             }
             if (loopCnt == 0) {
                 break;
@@ -768,7 +802,7 @@ public class GroundHog {
             then.add(Calendar.SECOND, 5);
             Long timeDiff = then.getTimeInMillis() - now.getTimeInMillis();
             if (donePrint) {
-                System.out.printf("File \"%s\" in use. Please close to let this program continue\n", xlsxfn);
+                dpf("File \"%s\" in use. Please close to let this program continue\n", xlsxfn);
                 donePrint = false;
             }
             try {
@@ -783,13 +817,13 @@ public class GroundHog {
     private String doAction(Row change, Row item) {
         // We need to find the ID of the board that this is targetting for a card
         // creation
-        LeanKitAccess lka = new LeanKitAccess(config);
+        LeanKitAccess lka = new LeanKitAccess(config, debugPrint);
         XSSFSheet iSht = findSheet(change.getCell(itemShtCol).getStringCellValue());
         String boardName = (item.getCell(findColumnFromSheet(iSht, "Board Name")).getStringCellValue());
         Board brd = lka.fetchBoard(boardName);
 
         if (brd == null) {
-            System.out.printf("Cannot find board with name %s for item on sheet %s, row %d\n", boardName,
+            dpf("Cannot find board with name %s for item on sheet %s, row %d\n", boardName,
                     change.getCell(itemShtCol).getStringCellValue(),
                     (int) change.getCell(rowCol).getNumericCellValue());
             return null;
@@ -844,7 +878,7 @@ public class GroundHog {
             Id card = createCard(lka, brd, flds); // Change from human readable to API fields on
                                                   // the way
             if (card == null) {
-                System.out.printf("Could not create card on board %s with details: %s", boardNumber,
+                dpf("Could not create card on board %s with details: %s", boardNumber,
                         fieldLst.toString());
                 System.exit(1);
             }
@@ -862,7 +896,7 @@ public class GroundHog {
             fld.put(change.getCell(fieldCol).getStringCellValue(), vals);
             Id id = updateCard(lka, brd, card, fld);
             if (id == null) {
-                System.out.printf("Could not modify card on board %s with details: %s", boardNumber, fld.toString());
+                dpf("Could not modify card on board %s with details: %s", boardNumber, fld.toString());
                 System.exit(1);
             }
             return id.id;
@@ -958,12 +992,12 @@ public class GroundHog {
 
         // If too many of these, then barf
         if (foundLanes.size() > 1) {
-            System.out.printf("Ambiguous lane name %s on board %s", name, brd.id);
+            dpf("Ambiguous lane name %s on board %s\n", name, brd.id);
             return null;
         }
 
         if (foundLanes.size() == 0) {
-            System.out.printf("Cannot find lane of name %s on board %s", name, brd.id);
+            dpf("Cannot find lane of name %s on board %s\n", name, brd.id);
             return null;
         }
         // Use the first found
@@ -980,7 +1014,7 @@ public class GroundHog {
                 if (foundLanes.size() == 1) {
                     foundLane = foundLanes.get(0);
                 } else {
-                    System.out.printf("Ambiguous lane name %s in path %s on board %s", foundLane.name, name, brd.id);
+                    dpf("Ambiguous lane name %s in path %s on board %s\n", foundLane.name, name, brd.id);
                     return null;
                 }
             } else {
@@ -1074,7 +1108,7 @@ public class GroundHog {
                             result.put("value2", ((JSONObject) fieldLst.get(fldName)).get("value1"));
                             finalUpdates.put("CustomField", result);
                         } else {
-                            System.out.printf("Incorrect field name \"%s\" provided for update on card %s\n", fldName,
+                            dpf("Incorrect field name \"%s\" provided for update on card %s\n", fldName,
                                     card.id);
                         }
                     }

@@ -37,11 +37,20 @@ public class LeanKitAccess {
     HttpUriRequest request = null;
     Board[] boards = null;
 
-    public LeanKitAccess(Configuration cfg) {
+    Boolean debugPrint = false;
+
+    public LeanKitAccess(Configuration cfg, Boolean dbp) {
         config = cfg;
         // Check URL has a trailing '/'
         if (!config.url.endsWith("/")) {
             config.url += "/";
+        }
+        debugPrint = dbp;
+    }
+
+    private void dpf(String fmt, Object...parms){
+        if (debugPrint){
+            System.out.printf(fmt, parms);
         }
     }
 
@@ -52,10 +61,10 @@ public class LeanKitAccess {
         // Convert to a type to return to caller.
         if (bd != null) {
             if (jresp.has("error")) {
-                System.out.printf("ERROR: \"%s\" gave response: \"%s\"", request.getRequestLine(), jresp.toString());
+                dpf("ERROR: \"%s\" gave response: \"%s\"", request.getRequestLine(), jresp.toString());
                 System.exit(1);
             } else if (jresp.has("statusCode")) {
-                System.out.printf("ERROR: \"%s\" gave response: \"%s\"", request.getRequestLine(), jresp.toString());
+                dpf("ERROR: \"%s\" gave response: \"%s\"", request.getRequestLine(), jresp.toString());
                 System.exit(1);
             } else if (jresp.has("pageMeta")) {
                 JSONObject pageMeta = new JSONObject(jresp.get("pageMeta").toString());
@@ -77,7 +86,7 @@ public class LeanKitAccess {
                         fieldName = "cards";
                         break;
                     default:
-                        System.out.println("Incorrect item type returned from server API");
+                        dpf("%s","Incorrect item type returned from server API");
                 }
                 if (fieldName != null) {
                     // Got something to return
@@ -130,7 +139,7 @@ public class LeanKitAccess {
                         break;
                     }
                     default: {
-                        System.out.println("oops! don't recognise requested item type");
+                        dpf("%s","oops! don't recognise requested item type");
                         System.exit(1);
                     }
                 }
@@ -180,7 +189,7 @@ public class LeanKitAccess {
                 result = EntityUtils.toString(httpResponse.getEntity());
             }
         } catch (IOException e) {
-            System.out.println(e.getMessage());
+            dpf("%s",e.getMessage());
             System.exit(1);
         }
         return result;
@@ -211,7 +220,7 @@ public class LeanKitAccess {
             uriA = new URIBuilder(request.getURI()).setParameter("search", name).build();
             ((HttpRequestBase) request).setURI(uriA);
         } catch (URISyntaxException e) {
-            System.out.println(e.getMessage());
+            dpf("%s",e.getMessage());
             System.exit(1);
         }
 
@@ -223,6 +232,7 @@ public class LeanKitAccess {
 
     public void deleteCards(ArrayList<Card> cards){
         for (int i = 0; i < cards.size(); i++) {
+            dpf("Deleting card %s\n", cards.get(i).id);
             request = new HttpDelete(config.url + "io/card/"+cards.get(i).id);
             processRequest();
         }
@@ -235,7 +245,7 @@ public class LeanKitAccess {
             uriA = new URIBuilder(request.getURI()).setParameter("board", id).build();
             ((HttpRequestBase) request).setURI(uriA);
         } catch (URISyntaxException e) {
-            System.out.println(e.getMessage());
+            dpf("%s",e.getMessage());
             System.exit(1);
         }
 
@@ -252,7 +262,7 @@ public class LeanKitAccess {
             uriB = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "true").build();
             ((HttpRequestBase) request).setURI(uriB);
         } catch (URISyntaxException e) {
-            System.out.println(e.getMessage());
+            dpf("%s",e.getMessage());
             System.exit(1);
         }
         ArrayList<Board> results = read(Board.class);
@@ -290,7 +300,7 @@ public class LeanKitAccess {
             uri = new URIBuilder(request.getURI()).setParameter("search", emailAddress).build();
             ((HttpRequestBase) request).setURI(uri);
         } catch (URISyntaxException e) {
-            System.out.println(e.getMessage());
+            dpf("%s",e.getMessage());
             System.exit(1);
         }
 
@@ -321,7 +331,7 @@ public class LeanKitAccess {
             uri = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "true").build();
             ((HttpRequestBase) request).setURI(uri);
         } catch (URISyntaxException e) {
-            System.out.println(e.getMessage());
+            dpf("%s",e.getMessage());
             System.exit(1);
         }
         return execute(Card.class);
@@ -334,7 +344,7 @@ public class LeanKitAccess {
             uri = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "true").build();
             ((HttpRequestBase) request).setURI(uri);
         } catch (URISyntaxException e) {
-            System.out.println(e.getMessage());
+            dpf("%s",e.getMessage());
             System.exit(1);
         }
         return execute(User.class);
@@ -389,7 +399,7 @@ public class LeanKitAccess {
                 case "Parent": {
                     if ((values.get("value1") == null) || (values.get("value1").toString() == "")
                             || (values.get("value1").toString() == "0")) {
-                        System.out.printf("Error trying to set parent of %s to value \"%s\"\n", card.id,
+                        dpf("Error trying to set parent of %s to value \"%s\"\n", card.id,
                                 values.get("value1").toString());
                         break;
                     } else if (values.get("value1").toString().startsWith("-")) {
@@ -526,7 +536,7 @@ public class LeanKitAccess {
             uri = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "false").build();
             ((HttpRequestBase) request).setURI(uri);
         } catch (URISyntaxException e) {
-            System.out.println(e.getMessage());
+            dpf("%s",e.getMessage());
             System.exit(1);
         }
         try {
@@ -547,7 +557,7 @@ public class LeanKitAccess {
             uri = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "true").build();
             ((HttpRequestBase) request).setURI(uri);
         } catch (URISyntaxException e) {
-            System.out.println(e.getMessage());
+            dpf("%s",e.getMessage());
             System.exit(1);
         }
 
@@ -572,7 +582,7 @@ public class LeanKitAccess {
             uri = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "false").build();
             ((HttpRequestBase) request).setURI(uri);
         } catch (URISyntaxException e) {
-            System.out.println(e.getMessage());
+            dpf("%s",e.getMessage());
             System.exit(1);
         }
         try {
