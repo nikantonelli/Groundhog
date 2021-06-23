@@ -6,11 +6,11 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.Base64;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.planview.groundhog.Configuration;
 
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
@@ -24,10 +24,12 @@ import org.apache.http.client.utils.URIBuilder;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
-import org.apache.xml.security.utils.Base64;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+
+import com.planview.groundhog.Configuration;
 
 public class LeanKitAccess {
 
@@ -171,7 +173,7 @@ public class LeanKitAccess {
                 request.addHeader("Authorization", "Bearer " + config.apikey);
             } else {
                 String creds = config.username + ":" + config.password;
-                request.addHeader("Authorization", "Basic " + Base64.encode(creds.getBytes()));
+                request.addHeader("Authorization", "Basic " + Base64.getEncoder().encode(creds.getBytes()));
             }
             httpResponse = client.execute(request);
             if ( httpResponse.getStatusLine().getStatusCode() != 204) {  // Get a json string back

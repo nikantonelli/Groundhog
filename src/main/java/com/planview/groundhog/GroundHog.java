@@ -8,7 +8,6 @@ import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -113,6 +112,9 @@ public class GroundHog {
                             if (deleteItems.equals("cycle")) {
                                 hog.deleteUserItems();
                             }
+                            if (moveLane != null) {
+                                hog.moveOurItems();
+                            }
                             // We need to reset the day to zero
                             if (cycleOnce == false) {
                                 day = 0;
@@ -136,7 +138,9 @@ public class GroundHog {
                             if (deleteItems.equals("cycle")) {
                                 hog.deleteUserItems();
                             }
-                            // We need to reset the day to zero
+                            if (moveLane != null) {
+                                hog.moveOurItems();
+                            } // We need to reset the day to zero
                             if (cycleOnce == false) {
                                 day = 0;
                             } else {
@@ -250,7 +254,6 @@ public class GroundHog {
         Option doOnce = new Option("o", "once", false, "Run updates from Day 0 to end only once (do not loop)");
         doOnce.setRequired(false);
         opts.addOption(doOnce);
-        // TODO: What about making this delete all the non-groundhog cards
         Option deleteCycle = new Option("d", "delete", true, "Delete all artifacts on start of day or end of cycle");
         deleteCycle.setRequired(false);
         opts.addOption(deleteCycle);
@@ -548,60 +551,54 @@ public class GroundHog {
         }
         // Should now have a list of cards that are not ours
         lka.deleteCards(leftOvers);
-        System.out.println("Done");
+        System.out.printf("Deleted %d %s\n", leftOvers.size(), (leftOvers.size() != 1) ? "cards" : "card");
     }
 
     private void moveOurItems() {
-
-        // Collate all the boards in the items sheets and get their IDs
-        // For each board, get the cards and check whether we have an ID that matches a
-        // row in the items
-        ArrayList<String> bLst = new ArrayList<>(); // Boards we have
-        ArrayList<String> cLst = new ArrayList<>(); // Card list we have
+        LeanKitAccess lka = new LeanKitAccess(config);
         Iterator<Row> row = changesSht.iterator();
 
+        Boolean changeMade = false;
         row.next(); // Skip header
         while (row.hasNext()) {
             Row change = row.next();
             XSSFSheet iSht = findSheet(change.getCell(itemShtCol).getStringCellValue());
             Row item = iSht.getRow((int) (change.getCell(rowCol).getNumericCellValue() - 1));
             String boardName = (item.getCell(findColumnFromSheet(iSht, "Board Name")).getStringCellValue());
+
+            //Does this actually work here?
+            if (item.getCell(findColumnFromSheet(iSht, "ID")).getCellType() == CellType.BLANK) {
+                continue;
+            }
+            //Need to verify, but in the meantime - belt'n'braces
             String cardId = (item.getCell(findColumnFromSheet(iSht, "ID")).getStringCellValue());
-            if (!bLst.contains(boardName)) {
-                bLst.add(boardName);
+            if (cardId == null || cardId.equals("")) {
+                continue;
+            }
+            Board brd = lka.fetchBoard(boardName);
+            Card card = lka.fetchCard(cardId);
+            if (brd == null) {
+                System.out.printf("Could not locate board %s\n", boardName);
+                System.exit(1);
             }
 
-            if ((cardId != "") && (cardId != null) && !cLst.contains(cardId)) {
-                cLst.add(cardId);
+            JSONObject fld = new JSONObject();
+            JSONObject vals = new JSONObject();
+            vals.put("value1", moveLane); // Lower levels check for the correct lane name.
+            vals.put("value2", "Archiving boards from GroundHog cycle");
+            fld.put("Lane", vals);
+            Id id = updateCard(lka, brd, card, fld);
+            if (id == null) {
+                System.out.printf("Could not move card %s, on board %s to lane %s\n", cardId, boardName, moveLane);
+                System.exit(1);
             }
+            // Now that the item is moved, delete the ID from the item row so we can create
+            // new ones the next time around
+            item.getCell(findColumnFromSheet(iSht, "ID")).setCellValue("");
+            changeMade = true;
         }
-        if ((bLst.size() == 0) || (cLst.size() == 0)) {
-            return;
-        }
-
-        //Got a list of card ids. Now move them to the lane 
-        // LeanKitAccess lka = new LeanKitAccess(config);
-        // Iterator<String> bIter = bLst.iterator();
-        // ArrayList<Card> leftOvers = new ArrayList<>();
-        // while (bIter.hasNext()) {
-        //     String bName = bIter.next();
-        //     Board brd = lka.fetchBoard(bName);
-        //     ArrayList<Card> cards = lka.fetchCardsFromBoard(brd.id);
-        //     if (cards != null) {
-        //         Iterator<Card> cIter = cards.iterator();
-        //         while (cIter.hasNext()) {
-        //             Card cd = cIter.next();
-        //             if (cLst.contains(cd.id)) {
-        //                 cards.remove(cd);
-        //                 cIter = cards.iterator();
-        //             }
-        //         }
-        //         leftOvers.addAll(cards);
-        //     }
-        // }
-        // // Should now have a list of cards that are not ours
-        // lka.deleteCards(leftOvers);
-        // System.out.println("Done");
+        //Only do this the once
+        if (changeMade) writeFile();
     }
 
     private void activity(Integer day) throws IOException, InterruptedException {
@@ -620,7 +617,7 @@ public class GroundHog {
         if ((dayCol == null) || (itemShtCol == null) || (rowCol == null) || (actionCol == null) || (fieldCol == null)
                 || (value1Col == null) || (value2Col == null)) {
             System.out.printf(
-                    "Could not find all required columns in %s sheet: \"Day Delta\", \"Item Sheet\", \"Item Row\", \"Action\", \"Field\", \"Value1\", \"Value2\"",
+                    "Could not find all required columns in %s sheet: \"Day Delta\", \"Item Sheet\", \"Item Row\", \"Action\", \"Field\", \"Value1\", \"Value2\"\n",
                     changesSht.getSheetName());
             System.exit(1);
         }
@@ -730,47 +727,56 @@ public class GroundHog {
                 item.getCell(idCol).setCellValue(id);
                 XSSFFormulaEvaluator.evaluateAllFormulaCells(wb);
             } else {
-                System.out.println("Got null back from doAction(). Seek help!");
+                System.out.println("Got null back from doAction(). Seek help!\n");
             }
         }
-        System.out.printf("\n");
+        System.out.printf("\n"); //Finish up the dotting.....
         if (changeMade) {
-            Integer loopCnt = 12;
-            while (loopCnt > 0) {
-                FileOutputStream oStr = null;
+            writeFile();
+        }
+    }
+
+    private void writeFile() {
+        Boolean donePrint = true;
+        Integer loopCnt = 12;
+        while (loopCnt > 0) {
+            FileOutputStream oStr = null;
+            try {
+                oStr = new FileOutputStream(xlsxfn);
                 try {
-                    oStr = new FileOutputStream(xlsxfn);
+                    wb.write(oStr);
                     try {
-                        wb.write(oStr);
-                        try {
-                            oStr.close();
-                            oStr = null;
-                            loopCnt = 0;
-                        } catch (IOException e) {
-                            System.out.printf("Error %s while closing file %s\n", e, xlsxfn);
-                        }
+                        oStr.close();
+                        oStr = null;
+                        loopCnt = 0;
                     } catch (IOException e) {
-                        System.out.printf("Error %s while writing file %s\n", e, xlsxfn);
-                        oStr.close(); // If this fails, just give up!
+                        System.out.printf("Error %s while closing file %s\n", e, xlsxfn);
                     }
                 } catch (IOException e) {
-                    System.out.printf("Error %s while opening/closing file %s\n", e, xlsxfn);
+                    System.out.printf("Error %s while writing file %s\n", e, xlsxfn);
+                    oStr.close(); // If this fails, just give up!
                 }
-                if (loopCnt == 0) {
-                    break;
-                }
-
-                Calendar now = Calendar.getInstance();
-                Calendar then = Calendar.getInstance();
-                then.add(Calendar.SECOND, 5);
-                Long timeDiff = then.getTimeInMillis() - now.getTimeInMillis();
-                if (changeMade) {
-                    System.out.printf("File \"%s\" in use. Please close to let this program continue\n", xlsxfn);
-                    changeMade = false;
-                }
-                Thread.sleep(timeDiff);
-                --loopCnt;
+            } catch (IOException e) {
+                System.out.printf("Error %s while opening/closing file %s\n", e, xlsxfn);
             }
+            if (loopCnt == 0) {
+                break;
+            }
+
+            Calendar now = Calendar.getInstance();
+            Calendar then = Calendar.getInstance();
+            then.add(Calendar.SECOND, 5);
+            Long timeDiff = then.getTimeInMillis() - now.getTimeInMillis();
+            if (donePrint) {
+                System.out.printf("File \"%s\" in use. Please close to let this program continue\n", xlsxfn);
+                donePrint = false;
+            }
+            try {
+                Thread.sleep(timeDiff);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            --loopCnt;
         }
     }
 
@@ -926,18 +932,67 @@ public class GroundHog {
     private ArrayList<Lane> findLanesFromParentId(Lane[] lanes, String id) {
         ArrayList<Lane> ln = new ArrayList<>();
         for (int i = 0; i < lanes.length; i++) {
-            if (lanes[i].parentLaneId.equals(id)) {
-                ln.add(lanes[i]);
-                break;
+            if (lanes[i].parentLaneId != null) {
+                if (lanes[i].parentLaneId.equals(id)) {
+                    ln.add(lanes[i]);
+                    break;
+                }
             }
         }
         return ln;
     }
 
+    private Lane findLaneFromString(Board brd, String name) {
+        String[] lanes = name.split("\\|");
+
+        // Is this VS Code failing to handle the '|' character gracefully....
+        if (lanes.length == 1) {
+            String[] vsLanes = name.split("%");
+            if (vsLanes.length > 1) {
+                lanes = vsLanes;
+            }
+        }
+
+        // Get the list of lanes with the topmost parent name
+        ArrayList<Lane> foundLanes = findLanesFromName(brd.lanes, lanes[0]);
+
+        // If too many of these, then barf
+        if (foundLanes.size() > 1) {
+            System.out.printf("Ambiguous lane name %s on board %s", name, brd.id);
+            return null;
+        }
+
+        if (foundLanes.size() == 0) {
+            System.out.printf("Cannot find lane of name %s on board %s", name, brd.id);
+            return null;
+        }
+        // Use the first found
+        Lane foundLane = foundLanes.get(0);
+        // We have already found a lane, so set loop counter to 1
+        // Integer j = 1;
+        for (int j = 1; j < lanes.length; j++) {
+
+            // do {
+            // Get those that have this as a parent
+            foundLanes = findLanesFromParentId(brd.lanes, foundLane.id);
+            if (foundLanes != null) {
+                // Make sure we only have the one child of that name
+                if (foundLanes.size() == 1) {
+                    foundLane = foundLanes.get(0);
+                } else {
+                    System.out.printf("Ambiguous lane name %s in path %s on board %s", foundLane.name, name, brd.id);
+                    return null;
+                }
+            } else {
+                return null;
+            }
+        }
+        return foundLane;
+    }
+
     private Id updateCard(LeanKitAccess lka, Board brd, Card card, JSONObject fieldLst) {
         // Get available types so we can convert type string to typeid string
         CardType[] cTypes = brd.cardTypes;
-        Lane[] bLanes = brd.lanes;
 
         JSONObject finalUpdates = new JSONObject();
         if (fieldLst.has("Type")) {
@@ -980,43 +1035,7 @@ public class GroundHog {
                     finalUpdates.put(fldName, fieldLst.get(fldName));
                     break;
                 case "lane": {
-                    String[] lanes = fldValues.get("value1").toString().split("\\|");
-                    if (lanes.length == 0) {
-                        System.out.printf("Cannot find lane of name %s on board %s", fldName, brd.id);
-                        break;
-                    }
-                    // Get the list of lanes with the topmost parent name
-                    ArrayList<Lane> foundLanes = findLanesFromName(bLanes, lanes[0]);
-
-                    // If too many of these, then barf
-                    if (foundLanes.size() > 1) {
-                        System.out.printf("Ambiguous lane name %s on board %s", fldValues.get("value1").toString(),
-                                brd.id);
-                        break;
-                    }
-                    Lane foundLane = foundLanes.get(0);
-                    // We have already found a lane, so set loop counter to 1
-                    // Integer j = 1;
-                    for (int j = 1; j < lanes.length; j++) {
-
-                        // do {
-                        // Get those that have this as a parent
-                        foundLanes = findLanesFromParentId(bLanes, foundLane.id);
-                        if (foundLanes != null) {
-                            // Make sure we only have the one child of that name
-                            if (foundLanes.size() == 1) {
-                                foundLane = foundLanes.get(0);
-                            } else {
-                                System.out.printf("Ambiguous lane name %s in path %s on board %s", foundLane.name,
-                                        fldValues.get("value1").toString(), brd.id);
-                                break;
-                            }
-                        } else {
-                            break;
-                        }
-                        // j++;
-                        // } while ( j < lanes.length);
-                    }
+                    Lane foundLane = findLaneFromString(brd, fldValues.get("value1").toString());
 
                     if (foundLane != null) {
                         JSONObject result = new JSONObject();
