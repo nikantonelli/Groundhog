@@ -29,8 +29,9 @@ The program will attempt to prompt you on how to build the right info in the spr
 
 -d <mode>     delete all user created cards (not from spreadsheet) where mode is 'day' (at the start of every day processing), 'cycle' (at the end of the cycle)
 
-## Not implemented yet:
--m <lane>     move all cards to this lane at end of cycle
+-m <lane>     move all cards to this lane at end of cycle. This also clears out the ID field in the spreadsheet so that the next cycle creates new items
+              DO NOT move cards to a lane that has a WIP limit as that doesn't make any sense here. If you try to, the program will put in a wipOverrideComment of
+              "Archiving boards from GroundHog cycle" for you.
 
 
 ## Example command line
