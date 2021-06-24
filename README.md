@@ -70,6 +70,10 @@ The Day Delta is the day from the start of the program that you want the change 
 'Item Sheet' and 'Item Row' identify the artifact that needs updating. The Value1 column is used 
 for plain fields, but those updates that require more info make use of Value1 and Value2. Hopefully, 
 there are some explanations in the example spreadsheet.
+  
+Changes are made sequentially. This program is not built for speed! The reason for sequential is 
+that after a 'Create', the Id must be written back into the spreadsheet so that a subsequent change
+can use it as a Parent. This will not work with parallel creations.
 
 ## Artifact Info
 
