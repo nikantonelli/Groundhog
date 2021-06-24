@@ -85,6 +85,10 @@ that is set for that row. You can set the row to 99 and then run with the option
 If you put a field in that is not part of the standard Card field set, then it is checked in the 
 list of Custom Fields for the board. At the moment, the type of Custom field is not checked, so 
 might barf at some point. 
+
+If at any time you see a persistent card on your board which is of the default type and has a title of 
+"dummy title", then you can delete it. It was due to a failure during the two-stage creation that the
+app uses. You probably had a network error or used Ctrl-C at the wrong time.
   
 Log an issue if something doesn't work.
 
