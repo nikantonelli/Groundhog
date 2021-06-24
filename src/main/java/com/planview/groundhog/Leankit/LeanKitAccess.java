@@ -203,7 +203,7 @@ public class LeanKitAccess {
                     } catch (InterruptedException e) {
                         dpf("%s", e.getMessage());
                     }
-                    processRequest();
+                    result = processRequest();
                     break;
                 }
                 default: {
