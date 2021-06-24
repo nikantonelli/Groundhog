@@ -185,8 +185,32 @@ public class LeanKitAccess {
                 request.addHeader("Authorization", "Basic " + Base64.getEncoder().encode(creds.getBytes()));
             }
             httpResponse = client.execute(request);
-            if ( httpResponse.getStatusLine().getStatusCode() != 204) {  // Get a json string back
-                result = EntityUtils.toString(httpResponse.getEntity());
+            switch(httpResponse.getStatusLine().getStatusCode()){
+                case 200:   //Card updated
+                case 201:   //Card created
+                {
+                    result = EntityUtils.toString(httpResponse.getEntity());
+                    break;
+                }
+                case 204:   //No response expected
+                {
+                    break;
+                }
+                case 429: {
+                    Integer retryAfter = Integer.parseInt(httpResponse.getHeaders("retry-after")[0].getValue());
+                    try {
+                        Thread.sleep(retryAfter);
+                    } catch (InterruptedException e) {
+                        dpf("%s", e.getMessage());
+                    }
+                    processRequest();
+                    break;
+                }
+                default: {
+                    dpf("Network fault: %s %s\n", httpResponse.getStatusLine().getStatusCode(), httpResponse.getStatusLine().getReasonPhrase() );
+                    System.exit(1);
+
+                }
             }
         } catch (IOException e) {
             dpf("%s",e.getMessage());

@@ -620,10 +620,8 @@ public class GroundHog {
             // Now that the item is moved, delete the ID from the item row so we can create
             // new ones the next time around
             item.getCell(findColumnFromSheet(iSht, "ID")).setCellValue("");
-            changeMade = true;
+            writeFile(); //Do this everytime just in case of user Ctrl-C or network failure
         }
-        //Only do this the once
-        if (changeMade) writeFile();
     }
 
     private static void dpf(String fmt, Object...parms){
@@ -745,29 +743,29 @@ public class GroundHog {
                 }
 
             }
+            String id = null;
             if (change.getCell(actionCol).getStringCellValue().equals("Create")) {
-                dpf("Create card \"%s\" on board \"%s\"\n", item.getCell(titleCol).getStringCellValue(),
-                        item.getCell(boardCol).getStringCellValue());
-            } else {
-                dpf(".");
-            }
-            String id = doAction(change, item);
-            if (id != null) {
-                changeMade = true;
+                id = doAction(change, item);
                 if (item.getCell(idCol) == null) {
 
                     item.createCell(idCol);
                 }
                 item.getCell(idCol).setCellValue(id);
                 XSSFFormulaEvaluator.evaluateAllFormulaCells(wb);
+                writeFile();
+                dpf("Create card \"%s\" on board \"%s\"\n", item.getCell(titleCol).getStringCellValue(),
+                        item.getCell(boardCol).getStringCellValue());
             } else {
+                id = doAction(change, item);
+                dpf(".");
+            }
+            
+            if (id == null) {
+                
                 dpf("%s","Got null back from doAction(). Seek help!\n");
             }
         }
         dpf("\n"); //Finish up the dotting.....
-        if (changeMade) {
-            writeFile();
-        }
     }
 
     private void writeFile() {
