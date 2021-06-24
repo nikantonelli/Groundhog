@@ -198,6 +198,7 @@ public class LeanKitAccess {
                 }
                 case 429: {
                     Integer retryAfter = Integer.parseInt(httpResponse.getHeaders("retry-after")[0].getValue());
+                    dpf("Received 429 status. waiting %.2f seconds\n", ((1.0*retryAfter)/1000.0));
                     try {
                         Thread.sleep(retryAfter);
                     } catch (InterruptedException e) {
