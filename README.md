@@ -110,4 +110,10 @@ app uses. You probably had a network error or used Ctrl-C at the wrong time.
   
 Log an issue if something doesn't work.
 
+## LICENCE
+This code is supplied as-is with no support, implied or otherwise. You are free to use it as you see 
+fit as far as I am concerned. If you use it, you are responsible for the consequences. I will 
+do best endeavours to fix stuff, but I do have a day job and that takes precedence.
 
+The code makes use of the API of Leankit so there is intellectual property involved there. Make sure you 
+are covered as it is your responsibility.
