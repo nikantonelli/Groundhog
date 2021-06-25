@@ -24,21 +24,35 @@ sent out using Sytem.out from Java - wherever that might go in your system.....
 
 ## Command Line Options
 
--f <file>     the XLSX spreadsheet to read from
+-f \<file\>     
 
--c            use this if the program is to be repetitively called by a cron job (needs -s option)
+the XLSX spreadsheet to read from
 
--s <file>     the name of the status file to use to keep track of what day the program is on when using the -c option
+-c            
 
--o            run through the list once
+use this if the program is to be repetitively called by a cron job (needs -s option)
 
--u            'day' update rate in seconds. Must be used without '-c' option. A rate of zero seconds will 
+-s \<file\>     
+
+the name of the status file to use to keep track of what day the program is on when using the -c option
+
+-o           
+
+run through the list once
+
+-u \<rate\>           
+
+'day' update rate in seconds. Must be used without '-c' option. A rate of zero seconds will 
               make the code wait for user input before going to a days updates
 
--d <mode>     delete all user created cards (not from spreadsheet) where mode is 'day' (at the start
+-d \<mode\>    
+
+delete all user created cards (not from spreadsheet) where mode is 'day' (at the start
               of every day processing), 'cycle' (at the end of the cycle)
 
--m <lane>     move all cards to this lane at end of cycle. This also clears out the ID field in 
+-m \<lane\>     
+
+move all cards to this lane at end of cycle. This also clears out the ID field in
               the spreadsheet so that the next cycle creates new items
               DO NOT move cards to a lane that has a WIP limit as that doesn't make any sense here.
               If you try to, the program will put in a wipOverrideComment of
@@ -70,6 +84,10 @@ The Day Delta is the day from the start of the program that you want the change 
 'Item Sheet' and 'Item Row' identify the artifact that needs updating. The Value1 column is used 
 for plain fields, but those updates that require more info make use of Value1 and Value2. Hopefully, 
 there are some explanations in the example spreadsheet.
+  
+Changes are made sequentially. This program is not built for speed! The reason for sequential is 
+that after a 'Create', the Id must be written back into the spreadsheet so that a subsequent change
+can use it as a Parent. This will not work with parallel creations.
 
 ## Artifact Info
 
