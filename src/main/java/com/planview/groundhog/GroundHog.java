@@ -110,21 +110,7 @@ public class GroundHog {
                         Long timeDiff = then.getTimeInMillis() - now.getTimeInMillis();
 
                         // Reset file after the time period has expired
-                        if (day >= hog.getRefresh()) {
-                            if (deleteItems.equals("cycle")) {
-                                hog.deleteUserItems();
-                            }
-                            if (moveLane != null) {
-                                hog.moveOurItems();
-                            }
-                            // We need to reset the day to zero
-                            if (cycleOnce == false) {
-                                day = 0;
-                            } else {
-                                dpf("Completed cycle once as requested");
-                                System.exit(1);
-                            }
-                        }
+                        checkWhatsNext(day, hog);
                         dpf("%s\n","Sleeping until: " + then.getTime());
                         Thread.sleep(timeDiff);
                     } else {
@@ -136,20 +122,7 @@ public class GroundHog {
                         // Do todays activity and then sleep
                         hog.activity(day++);
                         // Reset file after the time period has expired
-                        if (day >= hog.getRefresh()) {
-                            if (deleteItems.equals("cycle")) {
-                                hog.deleteUserItems();
-                            }
-                            if (moveLane != null) {
-                                hog.moveOurItems();
-                            } // We need to reset the day to zero
-                            if (cycleOnce == false) {
-                                day = 0;
-                            } else {
-                                dpf("Completed cycle once as requested");
-                                System.exit(1);
-                            }
-                        }
+                        checkWhatsNext(day, hog);
                     }
                 } catch (InterruptedException e) {
                     dpf("%s","Early wake from daily timer");
@@ -201,6 +174,7 @@ public class GroundHog {
                 // Reset file after the time period has expired
                 if (fDay >= hog.getRefresh()) {
                     // We need to reset the day to zero
+                    checkWhatsNext(fDay, hog);
                     fDay = 0;
                     setUpStatusFile(statusFs);
                 } else {
@@ -218,6 +192,23 @@ public class GroundHog {
 
         }
         scanner.close();
+    }
+
+    private static void checkWhatsNext(Integer day, GroundHog hog){
+        if (day >= hog.getRefresh()) {
+            if (deleteItems.equals("cycle")) {
+                hog.deleteUserItems();
+            }
+            if (moveLane != null) {
+                hog.moveOurItems();
+            } // We need to reset the day to zero
+            if (cycleOnce == false) {
+                day = 0;
+            } else {
+                dpf("Completed cycle once as requested");
+                System.exit(1);
+            }
+        }
     }
 
     public static void setUpStatusFile(File statusFs) {
