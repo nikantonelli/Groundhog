@@ -110,8 +110,8 @@ public class GroundHog {
                         Long timeDiff = then.getTimeInMillis() - now.getTimeInMillis();
 
                         // Reset file after the time period has expired
-                        checkWhatsNext(day, hog);
-                        dpf("%s\n","Sleeping until: " + then.getTime());
+                        day = checkWhatsNext(day, hog);
+                        dpf("%s\n", "Sleeping until: " + then.getTime());
                         Thread.sleep(timeDiff);
                     } else {
                         // Wait for a user input to continue
@@ -122,10 +122,10 @@ public class GroundHog {
                         // Do todays activity and then sleep
                         hog.activity(day++);
                         // Reset file after the time period has expired
-                        checkWhatsNext(day, hog);
+                        day = checkWhatsNext(day, hog);
                     }
                 } catch (InterruptedException e) {
-                    dpf("%s","Early wake from daily timer");
+                    dpf("%s", "Early wake from daily timer");
                     System.exit(1);
                 }
 
@@ -172,21 +172,15 @@ public class GroundHog {
                 fis.close();
                 hog.activity(fDay++);
                 // Reset file after the time period has expired
-                if (fDay >= hog.getRefresh()) {
-                    // We need to reset the day to zero
-                    checkWhatsNext(fDay, hog);
-                    fDay = 0;
-                    setUpStatusFile(statusFs);
-                } else {
-                    settings.put("day", fDay);
-                    FileWriter fos = new FileWriter(statusFs);
-                    settings.write(fos);
-                    fos.flush();
-                    fos.close();
-                }
+                fDay = checkWhatsNext(fDay, hog);
+                settings.put("day", fDay);
+                FileWriter fos = new FileWriter(statusFs);
+                settings.write(fos);
+                fos.flush();
+                fos.close();
 
             } catch (IOException e) {
-                dpf("%s",e.getMessage()); // Any other error, we barf.
+                dpf("%s", e.getMessage()); // Any other error, we barf.
                 System.exit(1);
             }
 
@@ -194,7 +188,7 @@ public class GroundHog {
         scanner.close();
     }
 
-    private static void checkWhatsNext(Integer day, GroundHog hog){
+    private static Integer checkWhatsNext(Integer day, GroundHog hog) {
         if (day >= hog.getRefresh()) {
             if (deleteItems.equals("cycle")) {
                 hog.deleteUserItems();
@@ -203,12 +197,13 @@ public class GroundHog {
                 hog.moveOurItems();
             } // We need to reset the day to zero
             if (cycleOnce == false) {
-                day = 0;
+                return 0;
             } else {
                 dpf("Completed cycle once as requested");
                 System.exit(1);
             }
         }
+        return day;
     }
 
     public static void setUpStatusFile(File statusFs) {
@@ -222,7 +217,7 @@ public class GroundHog {
             fos.flush();
             fos.close();
         } catch (IOException e) {
-            dpf("%s",e.getMessage());
+            dpf("%s", e.getMessage());
             System.exit(1);
         }
     }
@@ -254,7 +249,7 @@ public class GroundHog {
         Option moveCycle = new Option("m", "move", true, "Move all artifacts on end of cycle to this lane");
         moveCycle.setRequired(false);
         opts.addOption(moveCycle);
-        
+
         Option dbp = new Option("x", "debug", false, "Print out loads of helpful stuff");
         dbp.setRequired(false);
         opts.addOption(dbp);
@@ -265,7 +260,7 @@ public class GroundHog {
         try {
             cl = p.parse(opts, args);
         } catch (ParseException e) {
-            dpf("%s",e.getMessage());
+            dpf("%s", e.getMessage());
             hf.printHelp(" ", opts);
             System.exit(1);
         }
@@ -312,7 +307,7 @@ public class GroundHog {
         try {
             xlsxfis = new FileInputStream(new File(xlsxfn));
         } catch (FileNotFoundException e) {
-            dpf("%s",e.getMessage());
+            dpf("%s", e.getMessage());
 
             System.exit(1);
 
@@ -321,7 +316,7 @@ public class GroundHog {
             wb = new XSSFWorkbook(xlsxfis);
             xlsxfis.close();
         } catch (IOException e) {
-            dpf("%s",e.getMessage());
+            dpf("%s", e.getMessage());
             System.exit(1);
         }
 
@@ -373,7 +368,7 @@ public class GroundHog {
         // Assume that the titles are the first row
         Iterator<Row> ri = configSht.iterator();
         if (!ri.hasNext()) {
-            dpf("%s","Did not detect any header info on Config sheet (first row!)");
+            dpf("%s", "Did not detect any header info on Config sheet (first row!)");
             System.exit(1);
         }
         Row hdr = ri.next();
@@ -389,7 +384,7 @@ public class GroundHog {
         }
 
         if (fieldMap.size() != cols.size()) {
-            dpf("%s","Did not detect correct columns on Config sheet: " + cols.toString());
+            dpf("%s", "Did not detect correct columns on Config sheet: " + cols.toString());
             System.exit(1);
         }
 
@@ -433,7 +428,7 @@ public class GroundHog {
                         }
 
                     } catch (IllegalArgumentException | IllegalAccessException e) {
-                        dpf("%s",e.getMessage());
+                        dpf("%s", e.getMessage());
                         System.exit(1);
                     }
 
@@ -451,7 +446,7 @@ public class GroundHog {
          **/
 
         if ((config.apikey == null) && ((config.username == null) || (config.password == null))) {
-            dpf("%s","Did not detect enough user info: apikey or username/password pair");
+            dpf("%s", "Did not detect enough user info: apikey or username/password pair");
             System.exit(1);
         }
         if ((config.cyclelength != null) && (config.cyclelength.intValue() != 0)) {
@@ -515,13 +510,13 @@ public class GroundHog {
         while (row.hasNext()) {
             Row change = row.next();
 
-             //XLS Spreadsheets are horrible!
-            if ((change.getCell(itemShtCol) == null) || (change.getCell(rowCol) == null) ) {
+            // XLS Spreadsheets are horrible!
+            if ((change.getCell(itemShtCol) == null) || (change.getCell(rowCol) == null)) {
                 continue;
             }
             XSSFSheet iSht = findSheet(change.getCell(itemShtCol).getStringCellValue());
             Row item = iSht.getRow((int) (change.getCell(rowCol).getNumericCellValue() - 1));
-            if (item.getCell(findColumnFromSheet(iSht, "Board Name")) == null){
+            if (item.getCell(findColumnFromSheet(iSht, "Board Name")) == null) {
                 continue;
             }
             String boardName = (item.getCell(findColumnFromSheet(iSht, "Board Name")).getStringCellValue());
@@ -572,19 +567,19 @@ public class GroundHog {
         row.next(); // Skip header
         while (row.hasNext()) {
             Row change = row.next();
-            //XLS Spreadsheets are horrible!
-            if ((change.getCell(itemShtCol) == null) || (change.getCell(rowCol) == null) ) {
+            // XLS Spreadsheets are horrible!
+            if ((change.getCell(itemShtCol) == null) || (change.getCell(rowCol) == null)) {
                 continue;
             }
             XSSFSheet iSht = findSheet(change.getCell(itemShtCol).getStringCellValue());
             Row item = iSht.getRow((int) (change.getCell(rowCol).getNumericCellValue() - 1));
             String boardName = (item.getCell(findColumnFromSheet(iSht, "Board Name")).getStringCellValue());
 
-            //Does this actually work here?
+            // Does this actually work here?
             if (item.getCell(findColumnFromSheet(iSht, "ID")).getCellType() == CellType.BLANK) {
                 continue;
             }
-            //Need to verify, but in the meantime - belt'n'braces
+            // Need to verify, but in the meantime - belt'n'braces
             String cardId = (item.getCell(findColumnFromSheet(iSht, "ID")).getStringCellValue());
             if (cardId == null || cardId.equals("")) {
                 continue;
@@ -611,12 +606,12 @@ public class GroundHog {
             // Now that the item is moved, delete the ID from the item row so we can create
             // new ones the next time around
             item.getCell(findColumnFromSheet(iSht, "ID")).setCellValue("");
-            writeFile(); //Do this everytime just in case of user Ctrl-C or network failure
+            writeFile(); // Do this everytime just in case of user Ctrl-C or network failure
         }
     }
 
-    private static void dpf(String fmt, Object...parms){
-        if (debugPrint){
+    private static void dpf(String fmt, Object... parms) {
+        if (debugPrint) {
             System.out.printf(fmt, parms);
         }
     }
@@ -636,21 +631,20 @@ public class GroundHog {
 
         if ((dayCol == null) || (itemShtCol == null) || (rowCol == null) || (actionCol == null) || (fieldCol == null)
                 || (value1Col == null) || (value2Col == null)) {
-            dpf(
-                    "Could not find all required columns in %s sheet: \"Day Delta\", \"Item Sheet\", \"Item Row\", \"Action\", \"Field\", \"Value1\", \"Value2\"\n",
+            dpf("Could not find all required columns in %s sheet: \"Day Delta\", \"Item Sheet\", \"Item Row\", \"Action\", \"Field\", \"Value1\", \"Value2\"\n",
                     changesSht.getSheetName());
             System.exit(1);
         }
         // Nw add the rows of today to an array
         row.next(); // Skip first row with headers
         while (row.hasNext()) {
-            
+
             Row tr = row.next();
-            if (tr.getCell(dayCol) != null){
-            if (tr.getCell(dayCol).getNumericCellValue() == day) {
-                todaysChanges.add(tr);
+            if (tr.getCell(dayCol) != null) {
+                if (tr.getCell(dayCol).getNumericCellValue() == day) {
+                    todaysChanges.add(tr);
+                }
             }
-        }
         }
 
         if (deleteItems.equals("day")) {
@@ -694,8 +688,7 @@ public class GroundHog {
             // Check board name is present for a Create
             if ((change.getCell(actionCol).getStringCellValue().equals("Create")) && ((boardCol == null)
                     || (item.getCell(boardCol) == null) || (item.getCell(boardCol).getStringCellValue().isEmpty()))) {
-                dpf(
-                        "Cannot locate \"Board Name\" column needed in sheet \"%s\"  for a Create - skipping\n",
+                dpf("Cannot locate \"Board Name\" column needed in sheet \"%s\"  for a Create - skipping\n",
                         iSht.getSheetName());
                 continue;
             }
@@ -703,15 +696,13 @@ public class GroundHog {
             // Check title is present for a Create
             if ((change.getCell(actionCol).getStringCellValue().equals("Create"))
                     && ((item.getCell(titleCol) == null) || (item.getCell(titleCol).getStringCellValue().isEmpty()))) {
-                dpf(
-                        "Required \"title\" column/data missing in sheet \"%s\", row: %d for a Create - skipping\n",
+                dpf("Required \"title\" column/data missing in sheet \"%s\", row: %d for a Create - skipping\n",
                         iSht.getSheetName(), item.getRowNum());
                 continue;
             }
 
             if ((typeCol == null) || (item.getCell(typeCol) == null)) {
-                dpf("Cannot locate \"Type\" column on row:  %d  - using default for board\n",
-                        item.getRowNum());
+                dpf("Cannot locate \"Type\" column on row:  %d  - using default for board\n", item.getRowNum());
             }
 
             // If unset, it has a null value for the Leankit ID
@@ -726,8 +717,7 @@ public class GroundHog {
             } else {
                 // Check if this is a 'create' operation. If it is, ignore and continue past.
                 if (change.getCell(actionCol).getStringCellValue().equals("Create")) {
-                    dpf(
-                            "Ignoring action \"%s\" on item \"%s\" (attempting create on existing ID in row: %d)\n",
+                    dpf("Ignoring action \"%s\" on item \"%s\" (attempting create on existing ID in row: %d)\n",
                             change.getCell(actionCol).getStringCellValue(), item.getCell(titleCol).getStringCellValue(),
                             item.getRowNum());
                     continue; // Break out and try next change
@@ -750,13 +740,13 @@ public class GroundHog {
                 id = doAction(change, item);
                 dpf(".");
             }
-            
+
             if (id == null) {
-                
-                dpf("%s","Got null back from doAction(). Seek help!\n");
+
+                dpf("%s", "Got null back from doAction(). Seek help!\n");
             }
         }
-        dpf("\n"); //Finish up the dotting.....
+        dpf("\n"); // Finish up the dotting.....
     }
 
     private void writeFile() {
@@ -867,8 +857,7 @@ public class GroundHog {
             Id card = createCard(lka, brd, flds); // Change from human readable to API fields on
                                                   // the way
             if (card == null) {
-                dpf("Could not create card on board %s with details: %s", boardNumber,
-                        fieldLst.toString());
+                dpf("Could not create card on board %s with details: %s", boardNumber, fieldLst.toString());
                 System.exit(1);
             }
             return card.id;
@@ -1061,6 +1050,9 @@ public class GroundHog {
                     Lane foundLane = findLaneFromString(brd, fldValues.get("value1").toString());
 
                     if (foundLane != null) {
+                        if (foundLane.columns != 1) {   //Cannot move to a parent lane
+                            return null;
+                        }
                         JSONObject result = new JSONObject();
                         result.put("value1", foundLane.id);
                         if (fldValues.has("value2")) {
@@ -1097,8 +1089,8 @@ public class GroundHog {
                             result.put("value2", ((JSONObject) fieldLst.get(fldName)).get("value1"));
                             finalUpdates.put("CustomField", result);
                         } else {
-                            dpf("Incorrect field name \"%s\" provided for update on card %s\n", fldName,
-                                    card.id);
+                            dpf("Incorrect field name \"%s\" provided for update on card %s\n", fldName, card.id);
+                            return null;
                         }
                     }
                     break;
