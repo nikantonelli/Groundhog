@@ -89,6 +89,9 @@ Changes are made sequentially. This program is not built for speed! The reason f
 that after a 'Create', the Id must be written back into the spreadsheet so that a subsequent change
 can use it as a Parent. This will not work with parallel creations.
 
+Changes are written back after every one to protect against network or program failures. In this way, 
+re-running the program should pick up from where it left off without re-creating a whole bunch of stuff.
+
 ## Artifact Info
 
 The other sheets that require artifact definitions can have any number of plain fields defined
