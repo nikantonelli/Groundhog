@@ -386,8 +386,10 @@ public class LeanKitAccess {
             JSONObject values = (JSONObject) updates.get(key);
             switch (key) {
                 case "blockReason": {
-                    if (values.get("value1").toString().startsWith("-")) { // Make it startsWith rather than equals just
-                                                                           // in
+                    if (    values.get("value1").toString().startsWith("-") || 
+                            (values.get("value1").toString().equals("")) ||
+                            (values.get("value1").toString().length() == 1)) { 
+                        // Make it startsWith as well as equals just in
                         // case user forgets
                         JSONObject upd = new JSONObject();
                         upd.put("op", "replace");

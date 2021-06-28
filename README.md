@@ -51,19 +51,25 @@ The program looks on the Changes sheet for the column titles:
 The Group identifier is used to select row of changes. The 'Item Sheet' and 'Item Row' identify the artifact 
 that needs updating. 
 
-Value1 and Value2 are inly used if you want to add subsequent 'Modify' rows to the Changes sheet. 
+NORE: 'Create' entries only allow for fields that require a simple data entry. Those fields that need two values
+to be entered (e.g. externalLink), currently, need to be done with a Modify entry.
+
+Value1 and Value2 are only used if you want to add subsequent 'Modify' rows to the Changes sheet. 
 For example, you might want to create a set of items and then at a later date add some updates to the
 same items. As the IDs are already stored, you can stream a set of updates directly into the items
 
 DO NOT import into a board with a lane WIP setting that will be exceeded by your creates - the 
 program will barf at you. If you want to add to Lanes, but add a overrideWipComment, use the Modify 
 capability of the changes sheet and add the Lane into Value1 and the commment into Value2
+
+You cannot put the externalLink into the Create, it must be done with a Modify change entry. This
+is because it requires two values as the same time.
   
 Changes are made sequentially. This program is not built for speed! The reason for sequential is 
 that after a 'Create', the Id must be written back into the spreadsheet so that a subsequent change
 can use it as a Parent. This will not work with parallel creations.
 
-Changes are written back after every one to protect against network or program failures. In this way, 
+Any updates are written back after every one to protect against network or program failures. In this way, 
 re-running the program should pick up from where it left off without re-creating a whole bunch of stuff.
 
 ## Artifact Info

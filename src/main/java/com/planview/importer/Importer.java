@@ -365,10 +365,10 @@ public class Importer {
         }
 
         if (todaysChanges.size() == 0) {
-            dpf("No actions to take on day %d\n", day);
+            dpf("No actions to take for group %d\n", day);
             return;
         } else {
-            dpf("%d actions to take on day %d\n", todaysChanges.size(), day);
+            dpf("%d actions to take for group %d\n", todaysChanges.size(), day);
         }
 
         // Now scan through the changes doing the actions
