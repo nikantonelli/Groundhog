@@ -52,7 +52,9 @@ The Group identifier is used to select row of changes. The 'Item Sheet' and 'Ite
 that needs updating. 
 
 NORE: 'Create' entries only allow for fields that require a simple data entry. Those fields that need two values
-to be entered (e.g. externalLink), currently, need to be done with a Modify entry.
+to be entered (e.g. externalLink), currently, need to be separated with a comma ",". The externalLink field therefore
+must not have any comma characters in its label. The Lane field may require a overrideWipComment. If so, add this to
+the end of the Lane, once again, separated by a comma ",". See the example spreadsheet.
 
 Value1 and Value2 are only used if you want to add subsequent 'Modify' rows to the Changes sheet. 
 For example, you might want to create a set of items and then at a later date add some updates to the

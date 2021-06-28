@@ -469,8 +469,13 @@ public class LeanKitAccess {
                 case "externalLink": {
                     JSONObject link = new JSONObject();
                     JSONObject upd = new JSONObject();
-                    link.put("label", values.get("value1").toString());
-                    link.put("url", values.get("value2").toString());
+                    String[] bits = values.get("value1").toString().split(",");
+                    if (bits.length !=2) {
+                        dpf ("Could not extract externalLink from %s (possible ',' in label?)", values.get("value1").toString());
+                        break;
+                    }
+                    link.put("label", bits[0]);
+                    link.put("url", bits[1]);
                     upd.put("op", "replace");
                     upd.put("path", "/externalLink");
                     upd.put("value", link);
