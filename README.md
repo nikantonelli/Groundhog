@@ -1,18 +1,21 @@
-GroundHog Day
+Importer
 =============
 
 ## Overview
-An attempt to illustrate the progression of stories across a LeanKit board over time. The program 
-considers which updates to do each "day". (A day is really only an increment of a counter.)
+An attempt to import groups of changes listed in an Excel spreadsheet.  For simplistic import of items,
+thisis straightforward. The problem comes when you want to add connections between items. The reference
+to another item is done through its ID. The ID must exist before you can use it.
+
+To get around this problem you can use the formula capability of a cell to point to the ID cell of the 
+parent record. Every time an item is created, the program writes the ID back in and updates all the 
+formulas
+
+All you have to do, as a user, is to make sure that the formulas are correct..... good luck!
 
 ## Setup
 
-The program can be run as a command line program, or as one that is called periodically as a cron job. 
-The program requires a spreadsheet to list the changes that you want to make.
-
-If you just list the changes as a list of 'Create' entries, then effectively you have a card importer
-(make sure you use the '-o' option). Bear in mind that this was not written for that purpose and 
-might be a little awkward in use.
+The program can be run as a command line program and requires a spreadsheet to list the changes that 
+you want to make.
 
 The spreadsheet requires three sheets: 'Config', 'Changes', and a third one named whatever you like 
 to help you organise the change info. In my example file (Scrum Team.xlsx), the third sheet is named 
@@ -28,45 +31,10 @@ sent out using Sytem.out from Java - wherever that might go in your system.....
 
 the XLSX spreadsheet to read from
 
--c            
-
-use this if the program is to be repetitively called by a cron job (needs -s option)
-
--s \<file\>     
-
-the name of the status file to use to keep track of what day the program is on when using the -c option
-
--o           
-
-run through the list once
-
--u \<rate\>           
-
-'day' update rate in seconds. Must be used without '-c' option. A rate of zero seconds will 
-              make the code wait for user input before going to a days updates
-
--d \<mode\>    
-
-delete all user created cards (not from spreadsheet) where mode is 'day' (at the start
-              of every day processing), 'cycle' (at the end of the cycle)
-
--m \<lane\>     
-
-move all cards to this lane at end of cycle. This also clears out the ID field in
-              the spreadsheet so that the next cycle creates new items
-              DO NOT move cards to a lane that has a WIP limit as that doesn't make any sense here.
-              If you try to, the program will put in a wipOverrideComment of
-              "Archiving boards from GroundHog cycle" for you.
-
+-g \<group\>  Allows you to group the changes into blocks
 
 ## Example command line
-java -jar target\Groundhog-2.0-spring-boot.jar -f "Scrum Teams.xlsx" -c -s a.txt
-
-If you do not use the -c or -u options then the program will attempt to sit in a sleep loop being 
-woken up every (24 hours at) 3 in the morning.
-
-If you use -c, then the program will attempt to make (and initialise) the file in the directory it 
-is running in with the (-s) name you supply. If it cannot, then it will fail completely
+java -jar target\Groundhog-2.0-spring-boot.jar -f "Scrum Teams.xlsx" -g 2
 
 ## Config data
 
@@ -78,12 +46,18 @@ have to supply both. The next valid row in the sheet will be used as the require
 
 The program looks on the Changes sheet for the column titles: 
   
-'Day Delta', 'Item Sheet', 'Item Row', 'Action', 'Value1' and 'Value2' in Row 1.
+'Group', 'Item Sheet', 'Item Row', 'Action', 'Value1' and 'Value2' in Row 1.
   
-The Day Delta is the day from the start of the program that you want the change to occur, the 
-'Item Sheet' and 'Item Row' identify the artifact that needs updating. The Value1 column is used 
-for plain fields, but those updates that require more info make use of Value1 and Value2. Hopefully, 
-there are some explanations in the example spreadsheet.
+The Group identifier is used to select row of changes. The 'Item Sheet' and 'Item Row' identify the artifact 
+that needs updating. 
+
+Value1 and Value2 are inly used if you want to add subsequent 'Modify' rows to the Changes sheet. 
+For example, you might want to create a set of items and then at a later date add some updates to the
+same items. As the IDs are already stored, you can stream a set of updates directly into the items
+
+DO NOT import into a board with a lane WIP setting that will be exceeded by your creates - the 
+program will barf at you. If you want to add to Lanes, but add a overrideWipComment, use the Modify 
+capability of the changes sheet and add the Lane into Value1 and the commment into Value2
   
 Changes are made sequentially. This program is not built for speed! The reason for sequential is 
 that after a 'Create', the Id must be written back into the spreadsheet so that a subsequent change
@@ -99,9 +73,9 @@ for the creation event. The first two columns must have titles ID and 'Board Nam
 is blank at the start and when the artifact is created, the program wil write the id of the one
 created back into the ID field. The 'Board Name' is obviously where the artifact resides. The ID 
 can be used for further updates (e.g. add Parent). If you want to re-run the create, then just 
-delete the ID field contents for that row and run the command to go through for just the 'day'
+delete the ID field contents for that row and run the command to go through for just the 'group'
 that is set for that row. You can set the row to 99 and then run with the options:
-  "-f <filename> -u 0 -b 99 " to run it manually.
+  "-f <filename> -g 99 " to run it manually.
 
 If you put a field in that is not part of the standard Card field set, then it is checked in the 
 list of Custom Fields for the board. At the moment, the type of Custom field is not checked, so 
