@@ -759,25 +759,7 @@ public class Importer {
                     finalUpdates.put(fldName, fieldLst.get(fldName));
                     break;
                 case "lane": {
-                    // // Need to find the lane on the board and set the card to be in it.
-                    // JSONObject upd1 = new JSONObject();
-                    // int idx = values.get("value1").toString().indexOf(",");
-                    // upd1.put("op", "replace");
-                    // upd1.put("path", "/laneId");
-                    // if (idx > 1) {
-                    //     upd1.put("value", values.get("value1").toString().substring(0, idx));
-                    //     JSONObject upd2 = new JSONObject();
-                    //     upd2.put("op", "add");
-                    //     upd2.put("path", "/wipOverrideComment");
-                    //     upd2.put("value", values.get("value2").toString().substring(idx));
-                    //     jsa.put(upd2);
-                    // } else if (idx < 0) {
-                    //     upd1.put("value", values.get("value1").toString());
-                    // } else {
-                    //     break;
-                    // }
-                    // jsa.put(upd1);
-
+    
                     Lane foundLane = null; 
                     int idx = fldValues.get("value1").toString().indexOf(",");
                     String woc = null;
