@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
@@ -482,7 +483,6 @@ public class GroundHog {
     Integer actionCol = null;
     Integer fieldCol = null;
     Integer value1Col = null;
-    Integer value2Col = null;
 
     private Integer findColumnFromSheet(XSSFSheet sht, String name) {
         Iterator<Row> row = sht.iterator();
@@ -627,10 +627,9 @@ public class GroundHog {
         actionCol = findColumnFromSheet(changesSht, "Action");
         fieldCol = findColumnFromSheet(changesSht, "Field");
         value1Col = findColumnFromSheet(changesSht, "Value1");
-        value2Col = findColumnFromSheet(changesSht, "Value2");
 
         if ((dayCol == null) || (itemShtCol == null) || (rowCol == null) || (actionCol == null) || (fieldCol == null)
-                || (value1Col == null) || (value2Col == null)) {
+                || (value1Col == null)) {
             dpf("Could not find all required columns in %s sheet: \"Day Delta\", \"Item Sheet\", \"Item Row\", \"Action\", \"Field\", \"Value1\", \"Value2\"\n",
                     changesSht.getSheetName());
             System.exit(1);
@@ -869,7 +868,6 @@ public class GroundHog {
             JSONObject vals = new JSONObject();
 
             vals.put("value1", convertCells(change, value1Col));
-            vals.put("value2", convertCells(change, value2Col));
 
             fld.put(change.getCell(fieldCol).getStringCellValue(), vals);
             Id id = updateCard(lka, brd, card, fld);
@@ -941,13 +939,35 @@ public class GroundHog {
         return ln;
     }
 
+    private ArrayList<Lane> findLanesFromName(ArrayList<Lane> lanes, String name) {
+        ArrayList<Lane> ln = new ArrayList<>();
+        for (int i = 0; i < lanes.size(); i++) {
+            if (lanes.get(i).name.equals(name)) {
+                ln.add(lanes.get(i));
+                break;
+            }
+        }
+        return ln;
+    }
+
     private ArrayList<Lane> findLanesFromParentId(Lane[] lanes, String id) {
         ArrayList<Lane> ln = new ArrayList<>();
         for (int i = 0; i < lanes.length; i++) {
             if (lanes[i].parentLaneId != null) {
                 if (lanes[i].parentLaneId.equals(id)) {
                     ln.add(lanes[i]);
-                    break;
+                }
+            }
+        }
+        return ln;
+    }
+
+    private ArrayList<Lane> findLanesFromParentId(ArrayList<Lane> lanes, String id) {
+        ArrayList<Lane> ln = new ArrayList<>();
+        for (int i = 0; i < lanes.size(); i++) {
+            if (lanes.get(i).parentLaneId != null) {
+                if (lanes.get(i).parentLaneId.equals(id)) {
+                    ln.add(lanes.get(i));
                 }
             }
         }
@@ -965,41 +985,70 @@ public class GroundHog {
             }
         }
 
-        // Get the list of lanes with the topmost parent name
-        ArrayList<Lane> foundLanes = findLanesFromName(brd.lanes, lanes[0]);
-
-        // If too many of these, then barf
-        if (foundLanes.size() > 1) {
-            dpf("Ambiguous lane name %s on board %s\n", name, brd.id);
-            return null;
-        }
-
-        if (foundLanes.size() == 0) {
-            dpf("Cannot find lane of name %s on board %s\n", name, brd.id);
-            return null;
-        }
         // Use the first found
-        Lane foundLane = foundLanes.get(0);
-        // We have already found a lane, so set loop counter to 1
-        // Integer j = 1;
-        for (int j = 1; j < lanes.length; j++) {
+        Lane foundLane = null;
+        ArrayList<Lane> searchLanes = new ArrayList<>(Arrays.asList(brd.lanes));
+        
+        // for (int j = 0; j < lanes.length; j++) {
+        //     ArrayList<Lane> foundLanes = new ArrayList<>();
+           
+        //     ArrayList<Lane> lanesToCheck = findLanesFromName(searchLanes, lanes[j]);
+        //     Iterator<Lane> lIter = lanesToCheck.iterator();
+        //     while (lIter.hasNext()) {
+        //         Lane ln = lIter.next();
 
-            // do {
-            // Get those that have this as a parent
-            foundLanes = findLanesFromParentId(brd.lanes, foundLane.id);
-            if (foundLanes != null) {
-                // Make sure we only have the one child of that name
-                if (foundLanes.size() == 1) {
-                    foundLane = foundLanes.get(0);
-                } else {
-                    dpf("Ambiguous lane name %s in path %s on board %s\n", foundLane.name, name, brd.id);
-                    return null;
-                }
-            } else {
-                return null;
+        //         for (int i = 0; i < lanesToCheck.size(); i++) {
+        //             ArrayList<Lane> childLanes = findLanesFromParentId(brd.lanes, ln.id);
+        //             if (childLanes.size() > 0) {
+        //                 if (childLanes.get(i).name.equals(lanes[j])) {
+        //                     foundLanes.add(childLanes.get(i));
+        //                 }
+        //             }
+        //         }
+        //         if (foundLanes.size() == 0){
+        //             searchLanes = lanesToCheck;
+        //             break;
+        //         }
+        //     }
+        //     searchLanes = foundLanes;
+        // }
+        int j = 0;
+        ArrayList<Lane> lanesToCheck = findLanesFromName(searchLanes, lanes[j]);
+        do {
+            
+            if (++j > lanes.length) {
+                searchLanes = lanesToCheck;
+                break;
             }
+            Iterator<Lane> lIter = lanesToCheck.iterator();
+            while (lIter.hasNext()) {
+                ArrayList<Lane> foundLanes = new ArrayList<>();
+                Lane ln = lIter.next();
+                ArrayList<Lane> childLanes = findLanesFromParentId(brd.lanes, ln.id);
+                Iterator<Lane> clIter = childLanes.iterator();
+                while (clIter.hasNext()) {
+                    Lane cl = clIter.next();
+                    if (cl.name.equals(lanes[j])){
+                        foundLanes.add(cl);
+                    }
+                }
+                if ( foundLanes.size() > 0){
+                    lanesToCheck = foundLanes;
+                }
+            }
+
+        } while(true);
+
+
+
+        if (searchLanes.size() == 0) {
+            dpf("Cannot find lane \"%s\"on board \"%s\"\n", name, brd.title);
         }
-        return foundLane;
+        if (searchLanes.size() > 1) {
+            dpf("Ambiguous lane name \"%s\"on board \"%s\"\n", name, brd.title);
+        }
+
+        return searchLanes.get(0);
     }
 
     private Id updateCard(LeanKitAccess lka, Board brd, Card card, JSONObject fieldLst) {
@@ -1047,16 +1096,26 @@ public class GroundHog {
                     finalUpdates.put(fldName, fieldLst.get(fldName));
                     break;
                 case "lane": {
-                    Lane foundLane = findLaneFromString(brd, fldValues.get("value1").toString());
-
+                    Lane foundLane = null;
+                    int idx = fldValues.get("value1").toString().indexOf(",");
+                    String woc = null;
+                    if (idx < 0) {
+                        foundLane = findLaneFromString(brd, fldValues.get("value1").toString());
+                    } else if (idx > 0) {
+                        foundLane = findLaneFromString(brd, fldValues.get("value1").toString().substring(0, idx));
+                        woc = fldValues.get("value1").toString().substring(idx + 1).trim();
+                    } else {
+                        return null;
+                    }
                     if (foundLane != null) {
-                        if (foundLane.columns != 1) {   //Cannot move to a parent lane
+                        if (findLanesFromParentId(brd.lanes, foundLane.id).size() != 0) { // Cannot move to a parent
+                                                                                          // lane
                             return null;
                         }
                         JSONObject result = new JSONObject();
                         result.put("value1", foundLane.id);
-                        if (fldValues.has("value2")) {
-                            result.put("value2", fldValues.get("value2"));
+                        if (woc != null) {
+                            result.put("value2", woc);
                         }
                         finalUpdates.put(fldName, result);
                     }

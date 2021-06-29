@@ -196,7 +196,7 @@ public class LeanKitAccess {
                 {
                     break;
                 }
-                case 429: {
+                case 429: { //Flow control
                     Integer retryAfter = Integer.parseInt(httpResponse.getHeaders("retry-after")[0].getValue());
                     dpf("Received 429 status. waiting %.2f seconds\n", ((1.0*retryAfter)/1000.0));
                     try {
@@ -207,10 +207,27 @@ public class LeanKitAccess {
                     result = processRequest();
                     break;
                 }
+                case 422: { //Unprocessable Parameter
+                    dpf("Parameter Error in request: %s\n", request.toString() );
+                    System.exit(1);
+                }
+                case 404: { //Item not found
+                    dpf("Item not found: %s %s\n", httpResponse.getStatusLine().getStatusCode(), httpResponse.getStatusLine().getReasonPhrase() );
+                    System.exit(1);
+                }
+                case 503: { //Service unavailable
+                    dpf("Received 503 status. waiting 5 seconds\n");
+                    try {
+                        Thread.sleep(5000);
+                    } catch (InterruptedException e) {
+                        dpf("%s", e.getMessage());
+                    }
+                    result = processRequest();
+                    break;
+                }
                 default: {
                     dpf("Network fault: %s %s\n", httpResponse.getStatusLine().getStatusCode(), httpResponse.getStatusLine().getReasonPhrase() );
                     System.exit(1);
-
                 }
             }
         } catch (IOException e) {
@@ -454,7 +471,7 @@ public class LeanKitAccess {
                         JSONObject upd2 = new JSONObject();
                         upd2.put("op", "add");
                         upd2.put("path", "/wipOverrideComment");
-                        upd2.put("value", values.get("value2").toString());
+                        upd2.put("value", values.get("value2").toString().trim());
                         jsa.put(upd2);
                     }
                     break;
@@ -501,8 +518,13 @@ public class LeanKitAccess {
                 case "externalLink": {
                     JSONObject link = new JSONObject();
                     JSONObject upd = new JSONObject();
-                    link.put("label", values.get("value1").toString());
-                    link.put("url", values.get("value2").toString());
+                    String[] bits = values.get("value1").toString().split(",");
+                    if (bits.length !=2) {
+                        dpf ("Could not extract externalLink from %s (possible ',' in label?)", values.get("value1").toString());
+                        break;
+                    }
+                    link.put("label", bits[0]);
+                    link.put("url", bits[1].trim());
                     upd.put("op", "replace");
                     upd.put("path", "/externalLink");
                     upd.put("value", link);
