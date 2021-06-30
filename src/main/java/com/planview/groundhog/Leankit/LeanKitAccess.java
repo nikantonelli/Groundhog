@@ -48,8 +48,8 @@ public class LeanKitAccess {
         debugPrint = dbp;
     }
 
-    private void dpf(String fmt, Object...parms){
-        if (debugPrint){
+    private void dpf(String fmt, Object... parms) {
+        if (debugPrint) {
             System.out.printf(fmt, parms);
         }
     }
@@ -60,10 +60,7 @@ public class LeanKitAccess {
         JSONObject jresp = new JSONObject(bd);
         // Convert to a type to return to caller.
         if (bd != null) {
-            if (jresp.has("error")) {
-                dpf("ERROR: \"%s\" gave response: \"%s\"", request.getRequestLine(), jresp.toString());
-                System.exit(1);
-            } else if (jresp.has("statusCode")) {
+            if (jresp.has("error") || jresp.has("statusCode")) {
                 dpf("ERROR: \"%s\" gave response: \"%s\"", request.getRequestLine(), jresp.toString());
                 System.exit(1);
             } else if (jresp.has("pageMeta")) {
@@ -86,7 +83,7 @@ public class LeanKitAccess {
                         fieldName = "cards";
                         break;
                     default:
-                        dpf("%s","Incorrect item type returned from server API");
+                        dpf("%s", "Incorrect item type returned from server API");
                 }
                 if (fieldName != null) {
                     // Got something to return
@@ -139,7 +136,7 @@ public class LeanKitAccess {
                         break;
                     }
                     default: {
-                        dpf("%s","oops! don't recognise requested item type");
+                        dpf("%s", "oops! don't recognise requested item type");
                         System.exit(1);
                     }
                 }
@@ -159,11 +156,13 @@ public class LeanKitAccess {
      */
     public <T> T execute(Class<T> expectedResponseType) {
         String result = processRequest();
-        ObjectMapper om = new ObjectMapper();
-        try {
-            return om.readValue(result, expectedResponseType);
-        } catch (JsonProcessingException e) {
-            e.printStackTrace();
+        if (result != null) {
+            ObjectMapper om = new ObjectMapper();
+            try {
+                return om.readValue(result, expectedResponseType);
+            } catch (JsonProcessingException e) {
+                e.printStackTrace();
+            }
         }
         return null;
     }
@@ -185,20 +184,20 @@ public class LeanKitAccess {
                 request.addHeader("Authorization", "Basic " + Base64.getEncoder().encode(creds.getBytes()));
             }
             httpResponse = client.execute(request);
-            switch(httpResponse.getStatusLine().getStatusCode()){
-                case 200:   //Card updated
-                case 201:   //Card created
+            switch (httpResponse.getStatusLine().getStatusCode()) {
+                case 200: // Card updated
+                case 201: // Card created
                 {
                     result = EntityUtils.toString(httpResponse.getEntity());
                     break;
                 }
-                case 204:   //No response expected
+                case 204: // No response expected
                 {
                     break;
                 }
-                case 429: { //Flow control
+                case 429: { // Flow control
                     Integer retryAfter = Integer.parseInt(httpResponse.getHeaders("retry-after")[0].getValue());
-                    dpf("Received 429 status. waiting %.2f seconds\n", ((1.0*retryAfter)/1000.0));
+                    dpf("Received 429 status. waiting %.2f seconds\n", ((1.0 * retryAfter) / 1000.0));
                     try {
                         Thread.sleep(retryAfter);
                     } catch (InterruptedException e) {
@@ -207,16 +206,17 @@ public class LeanKitAccess {
                     result = processRequest();
                     break;
                 }
-                case 422: { //Unprocessable Parameter
-                    dpf("Parameter Error in request: %s\n", request.toString() );
-                    System.exit(1);
+                case 422: { // Unprocessable Parameter
+                    dpf("Parameter Error in request: %s\n", request.toString());
+                    return null;
                 }
-                case 404: { //Item not found
-                    dpf("Item not found: %s %s\n", httpResponse.getStatusLine().getStatusCode(), httpResponse.getStatusLine().getReasonPhrase() );
-                    System.exit(1);
+                case 404: { // Item not found
+                    dpf("Item not found: %s %s\n", httpResponse.getStatusLine().getStatusCode(),
+                            httpResponse.getStatusLine().getReasonPhrase());
+                    return null;
                 }
-                case 503: { //Service unavailable
-                    dpf("Received 503 status. waiting 5 seconds\n");
+                case 503: { // Service unavailable
+                    dpf("Received 503 status. retrying in 5 seconds\n");
                     try {
                         Thread.sleep(5000);
                     } catch (InterruptedException e) {
@@ -226,12 +226,13 @@ public class LeanKitAccess {
                     break;
                 }
                 default: {
-                    dpf("Network fault: %s %s\n", httpResponse.getStatusLine().getStatusCode(), httpResponse.getStatusLine().getReasonPhrase() );
-                    System.exit(1);
+                    dpf("Network fault: %s %s\n", httpResponse.getStatusLine().getStatusCode(),
+                            httpResponse.getStatusLine().getReasonPhrase());
+                    return null;
                 }
             }
         } catch (IOException e) {
-            dpf("%s",e.getMessage());
+            dpf("%s", e.getMessage());
             System.exit(1);
         }
         return result;
@@ -262,7 +263,7 @@ public class LeanKitAccess {
             uriA = new URIBuilder(request.getURI()).setParameter("search", name).build();
             ((HttpRequestBase) request).setURI(uriA);
         } catch (URISyntaxException e) {
-            dpf("%s",e.getMessage());
+            dpf("%s", e.getMessage());
             System.exit(1);
         }
 
@@ -272,10 +273,10 @@ public class LeanKitAccess {
         return read(Board.class);
     }
 
-    public void deleteCards(ArrayList<Card> cards){
+    public void deleteCards(ArrayList<Card> cards) {
         for (int i = 0; i < cards.size(); i++) {
             dpf("Deleting card %s\n", cards.get(i).id);
-            request = new HttpDelete(config.url + "io/card/"+cards.get(i).id);
+            request = new HttpDelete(config.url + "io/card/" + cards.get(i).id);
             processRequest();
         }
     }
@@ -287,7 +288,7 @@ public class LeanKitAccess {
             uriA = new URIBuilder(request.getURI()).setParameter("board", id).build();
             ((HttpRequestBase) request).setURI(uriA);
         } catch (URISyntaxException e) {
-            dpf("%s",e.getMessage());
+            dpf("%s", e.getMessage());
             System.exit(1);
         }
 
@@ -304,7 +305,7 @@ public class LeanKitAccess {
             uriB = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "true").build();
             ((HttpRequestBase) request).setURI(uriB);
         } catch (URISyntaxException e) {
-            dpf("%s",e.getMessage());
+            dpf("%s", e.getMessage());
             System.exit(1);
         }
         ArrayList<Board> results = read(Board.class);
@@ -342,7 +343,7 @@ public class LeanKitAccess {
             uri = new URIBuilder(request.getURI()).setParameter("search", emailAddress).build();
             ((HttpRequestBase) request).setURI(uri);
         } catch (URISyntaxException e) {
-            dpf("%s",e.getMessage());
+            dpf("%s", e.getMessage());
             System.exit(1);
         }
 
@@ -373,7 +374,7 @@ public class LeanKitAccess {
             uri = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "true").build();
             ((HttpRequestBase) request).setURI(uri);
         } catch (URISyntaxException e) {
-            dpf("%s",e.getMessage());
+            dpf("%s", e.getMessage());
             System.exit(1);
         }
         return execute(Card.class);
@@ -386,7 +387,7 @@ public class LeanKitAccess {
             uri = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "true").build();
             ((HttpRequestBase) request).setURI(uri);
         } catch (URISyntaxException e) {
-            dpf("%s",e.getMessage());
+            dpf("%s", e.getMessage());
             System.exit(1);
         }
         return execute(User.class);
@@ -519,8 +520,9 @@ public class LeanKitAccess {
                     JSONObject link = new JSONObject();
                     JSONObject upd = new JSONObject();
                     String[] bits = values.get("value1").toString().split(",");
-                    if (bits.length !=2) {
-                        dpf ("Could not extract externalLink from %s (possible ',' in label?)", values.get("value1").toString());
+                    if (bits.length != 2) {
+                        dpf("Could not extract externalLink from %s (possible ',' in label?)",
+                                values.get("value1").toString());
                         break;
                     }
                     link.put("label", bits[0]);
@@ -583,7 +585,7 @@ public class LeanKitAccess {
             uri = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "false").build();
             ((HttpRequestBase) request).setURI(uri);
         } catch (URISyntaxException e) {
-            dpf("%s",e.getMessage());
+            dpf("%s", e.getMessage());
             System.exit(1);
         }
         try {
@@ -604,7 +606,7 @@ public class LeanKitAccess {
             uri = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "true").build();
             ((HttpRequestBase) request).setURI(uri);
         } catch (URISyntaxException e) {
-            dpf("%s",e.getMessage());
+            dpf("%s", e.getMessage());
             System.exit(1);
         }
 
@@ -629,7 +631,7 @@ public class LeanKitAccess {
             uri = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "false").build();
             ((HttpRequestBase) request).setURI(uri);
         } catch (URISyntaxException e) {
-            dpf("%s",e.getMessage());
+            dpf("%s", e.getMessage());
             System.exit(1);
         }
         try {

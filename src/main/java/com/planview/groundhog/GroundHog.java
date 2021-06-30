@@ -541,6 +541,10 @@ public class GroundHog {
         while (bIter.hasNext()) {
             String bName = bIter.next();
             Board brd = lka.fetchBoard(bName);
+            if (brd == null) {
+                dpf("Could not locate board \"%s\"\n", bName);
+                return;
+            }
             ArrayList<Card> cards = lka.fetchCardsFromBoard(brd.id);
             if (cards != null) {
                 Iterator<Card> cIter = cards.iterator();
@@ -553,6 +557,9 @@ public class GroundHog {
                 }
                 leftOvers.addAll(cards);
             }
+            else {
+                return;
+            }
         }
         // Should now have a list of cards that are not ours
         lka.deleteCards(leftOvers);
@@ -562,8 +569,6 @@ public class GroundHog {
     private void moveOurItems() {
         LeanKitAccess lka = new LeanKitAccess(config, debugPrint);
         Iterator<Row> row = changesSht.iterator();
-
-        Boolean changeMade = false;
         row.next(); // Skip header
         while (row.hasNext()) {
             Row change = row.next();
@@ -573,7 +578,7 @@ public class GroundHog {
             }
             XSSFSheet iSht = findSheet(change.getCell(itemShtCol).getStringCellValue());
             Row item = iSht.getRow((int) (change.getCell(rowCol).getNumericCellValue() - 1));
-            String boardName = (item.getCell(findColumnFromSheet(iSht, "Board Name")).getStringCellValue());
+            String bName = (item.getCell(findColumnFromSheet(iSht, "Board Name")).getStringCellValue());
 
             // Does this actually work here?
             if (item.getCell(findColumnFromSheet(iSht, "ID")).getCellType() == CellType.BLANK) {
@@ -584,11 +589,16 @@ public class GroundHog {
             if (cardId == null || cardId.equals("")) {
                 continue;
             }
-            Board brd = lka.fetchBoard(boardName);
+            Board brd = lka.fetchBoard(bName);
             Card card = lka.fetchCard(cardId);
             if (brd == null) {
-                dpf("Could not locate board %s\n", boardName);
-                System.exit(1);
+                dpf("Could not locate board \"%s\"\n", bName);
+                return;
+            }
+
+            if (card == null) {
+                dpf("Could not locate card \"%s\"\n", cardId);
+                break;
             }
 
             JSONObject fld = new JSONObject();
@@ -598,10 +608,10 @@ public class GroundHog {
             fld.put("Lane", vals);
             Id id = updateCard(lka, brd, card, fld);
             if (id == null) {
-                dpf("Could not move card %s, on board \"%s\" to lane \"%s\"\n", cardId, boardName, moveLane);
+                dpf("Could not move card %s, on board \"%s\" to lane \"%s\"\n", cardId, bName, moveLane);
                 System.exit(1);
             } else {
-                dpf("Moved card %s, on board \"%s\" to lane \"%s\"\n", cardId, boardName, moveLane);
+                dpf("Moved card %s, on board \"%s\" to lane \"%s\"\n", cardId, bName, moveLane);
             }
             // Now that the item is moved, delete the ID from the item row so we can create
             // new ones the next time around
@@ -626,11 +636,11 @@ public class GroundHog {
         rowCol = findColumnFromSheet(changesSht, "Item Row");
         actionCol = findColumnFromSheet(changesSht, "Action");
         fieldCol = findColumnFromSheet(changesSht, "Field");
-        value1Col = findColumnFromSheet(changesSht, "Value1");
+        value1Col = findColumnFromSheet(changesSht, "Value");
 
         if ((dayCol == null) || (itemShtCol == null) || (rowCol == null) || (actionCol == null) || (fieldCol == null)
                 || (value1Col == null)) {
-            dpf("Could not find all required columns in %s sheet: \"Day Delta\", \"Item Sheet\", \"Item Row\", \"Action\", \"Field\", \"Value1\", \"Value2\"\n",
+            dpf("Could not find all required columns in %s sheet: \"Day Delta\", \"Item Sheet\", \"Item Row\", \"Action\", \"Field\", \"Value\"\n",
                     changesSht.getSheetName());
             System.exit(1);
         }
@@ -660,7 +670,6 @@ public class GroundHog {
         // Now scan through the changes doing the actions
         Iterator<Row> cItor = todaysChanges.iterator();
         Row item = null;
-        Boolean changeMade = false;
         while (cItor.hasNext()) {
             Row change = cItor.next();
             // Get the item that this change refers to
@@ -864,6 +873,10 @@ public class GroundHog {
         } else if (change.getCell(actionCol).getStringCellValue().equals("Modify")) {
             // Fetch the ID from the item and then fetch that card
             Card card = lka.fetchCard(item.getCell(idCol).getStringCellValue());
+
+            if (card == null) {
+                dpf("Could not locate card \"%s\" on board \"%s\"\n", item.getCell(idCol).getStringCellValue(), boardNumber);
+            }
             JSONObject fld = new JSONObject();
             JSONObject vals = new JSONObject();
 
@@ -872,7 +885,7 @@ public class GroundHog {
             fld.put(change.getCell(fieldCol).getStringCellValue(), vals);
             Id id = updateCard(lka, brd, card, fld);
             if (id == null) {
-                dpf("Could not modify card on board %s with details: %s", boardNumber, fld.toString());
+                dpf("Could not modify card \"%s\" on board %s with details: %s", card.id, boardNumber, fld.toString());
                 System.exit(1);
             }
             return id.id;
@@ -925,20 +938,6 @@ public class GroundHog {
         return updateCard(lka, brd, newCard, fieldLst);
     }
 
-    // Finds the first one that matches - make sure you don't have multiples of
-    // the same name at the top of the tree!!
-
-    private ArrayList<Lane> findLanesFromName(Lane[] lanes, String name) {
-        ArrayList<Lane> ln = new ArrayList<>();
-        for (int i = 0; i < lanes.length; i++) {
-            if (lanes[i].name.equals(name)) {
-                ln.add(lanes[i]);
-                break;
-            }
-        }
-        return ln;
-    }
-
     private ArrayList<Lane> findLanesFromName(ArrayList<Lane> lanes, String name) {
         ArrayList<Lane> ln = new ArrayList<>();
         for (int i = 0; i < lanes.size(); i++) {
@@ -962,18 +961,6 @@ public class GroundHog {
         return ln;
     }
 
-    private ArrayList<Lane> findLanesFromParentId(ArrayList<Lane> lanes, String id) {
-        ArrayList<Lane> ln = new ArrayList<>();
-        for (int i = 0; i < lanes.size(); i++) {
-            if (lanes.get(i).parentLaneId != null) {
-                if (lanes.get(i).parentLaneId.equals(id)) {
-                    ln.add(lanes.get(i));
-                }
-            }
-        }
-        return ln;
-    }
-
     private Lane findLaneFromString(Board brd, String name) {
         String[] lanes = name.split("\\|");
 
@@ -984,39 +971,11 @@ public class GroundHog {
                 lanes = vsLanes;
             }
         }
-
-        // Use the first found
-        Lane foundLane = null;
         ArrayList<Lane> searchLanes = new ArrayList<>(Arrays.asList(brd.lanes));
-        
-        // for (int j = 0; j < lanes.length; j++) {
-        //     ArrayList<Lane> foundLanes = new ArrayList<>();
-           
-        //     ArrayList<Lane> lanesToCheck = findLanesFromName(searchLanes, lanes[j]);
-        //     Iterator<Lane> lIter = lanesToCheck.iterator();
-        //     while (lIter.hasNext()) {
-        //         Lane ln = lIter.next();
-
-        //         for (int i = 0; i < lanesToCheck.size(); i++) {
-        //             ArrayList<Lane> childLanes = findLanesFromParentId(brd.lanes, ln.id);
-        //             if (childLanes.size() > 0) {
-        //                 if (childLanes.get(i).name.equals(lanes[j])) {
-        //                     foundLanes.add(childLanes.get(i));
-        //                 }
-        //             }
-        //         }
-        //         if (foundLanes.size() == 0){
-        //             searchLanes = lanesToCheck;
-        //             break;
-        //         }
-        //     }
-        //     searchLanes = foundLanes;
-        // }
         int j = 0;
         ArrayList<Lane> lanesToCheck = findLanesFromName(searchLanes, lanes[j]);
-        do {
-            
-            if (++j > lanes.length) {
+        do {   
+            if (++j >= lanes.length) {
                 searchLanes = lanesToCheck;
                 break;
             }
@@ -1038,8 +997,6 @@ public class GroundHog {
             }
 
         } while(true);
-
-
 
         if (searchLanes.size() == 0) {
             dpf("Cannot find lane \"%s\"on board \"%s\"\n", name, brd.title);
@@ -1157,8 +1114,14 @@ public class GroundHog {
 
         }
         Id id = new Id();
-        id.id = lka.updateCardFromId(brd, card, finalUpdates).id;
-        return id;
+        Card upc = lka.updateCardFromId(brd, card, finalUpdates);
+        if (upc != null){
+            id.id = upc.id;
+            return id;
+        }
+        else {
+            return null;
+        }
     }
 
     private XSSFSheet findSheet(String name) {
