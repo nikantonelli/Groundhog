@@ -58,6 +58,9 @@ move all cards to this lane at end of cycle. This also clears out the ID field i
               If you try to, the program will put in a wipOverrideComment of
               "Archiving boards from GroundHog cycle" for you.
 
+-x
+
+Print out some debug info that helps in setting things up.
 
 ## Example command line
 java -jar target\Groundhog-2.0-spring-boot.jar -f "Scrum Teams.xlsx" -c -s a.txt
