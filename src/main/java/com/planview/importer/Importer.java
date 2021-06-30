@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
@@ -312,7 +313,6 @@ public class Importer {
     Integer actionCol = null;
     Integer fieldCol = null;
     Integer value1Col = null;
-    Integer value2Col = null;
 
     private Integer findColumnFromSheet(XSSFSheet sht, String name) {
         Iterator<Row> row = sht.iterator();
@@ -343,12 +343,12 @@ public class Importer {
         rowCol = findColumnFromSheet(changesSht, "Item Row");
         actionCol = findColumnFromSheet(changesSht, "Action");
         fieldCol = findColumnFromSheet(changesSht, "Field");
-        value1Col = findColumnFromSheet(changesSht, "Value1");
-        value2Col = findColumnFromSheet(changesSht, "Value2");
+        value1Col = findColumnFromSheet(changesSht, "Value");
+
 
         if ((dayCol == null) || (itemShtCol == null) || (rowCol == null) || (actionCol == null) || (fieldCol == null)
-                || (value1Col == null) || (value2Col == null)) {
-            dpf("Could not find all required columns in %s sheet: \"Group\", \"Item Sheet\", \"Item Row\", \"Action\", \"Field\", \"Value1\", \"Value2\"\n",
+                || (value1Col == null)) {
+            dpf("Could not find all required columns in %s sheet: \"Group\", \"Item Sheet\", \"Item Row\", \"Action\", \"Field\", \"Value\"\n",
                     changesSht.getSheetName());
             System.exit(1);
         }
@@ -577,16 +577,19 @@ public class Importer {
         } else if (change.getCell(actionCol).getStringCellValue().equals("Modify")) {
             // Fetch the ID from the item and then fetch that card
             Card card = lka.fetchCard(item.getCell(idCol).getStringCellValue());
+            if (card == null) {
+                dpf("Could not locate card \"%s\" on board \"%s\"\n", item.getCell(idCol).getStringCellValue(), boardNumber);
+                return null;
+            }
             JSONObject fld = new JSONObject();
             JSONObject vals = new JSONObject();
 
             vals.put("value1", convertCells(change, value1Col));
-            vals.put("value2", convertCells(change, value2Col));
 
             fld.put(change.getCell(fieldCol).getStringCellValue(), vals);
             Id id = updateCard(lka, brd, card, fld);
             if (id == null) {
-                dpf("Could not modify card on board %s with details: %s", boardNumber, fld.toString());
+                dpf("Could not modify card on board %s with details:\"%s\"\n", boardNumber, fld.toString());
                 System.exit(1);
             }
             return id.id;
@@ -639,20 +642,16 @@ public class Importer {
         return updateCard(lka, brd, newCard, fieldLst);
     }
 
-    // Finds the first one that matches - make sure you don't have multiples of
-    // the same name at the top of the tree!!
-
-    private ArrayList<Lane> findLanesFromName(Lane[] lanes, String name) {
+    private ArrayList<Lane> findLanesFromName(ArrayList<Lane> lanes, String name) {
         ArrayList<Lane> ln = new ArrayList<>();
-        for (int i = 0; i < lanes.length; i++) {
-            if (lanes[i].name.equals(name)) {
-                ln.add(lanes[i]);
+        for (int i = 0; i < lanes.size(); i++) {
+            if (lanes.get(i).name.equals(name)) {
+                ln.add(lanes.get(i));
                 break;
             }
         }
         return ln;
     }
-
     private ArrayList<Lane> findLanesFromParentId(Lane[] lanes, String id) {
         ArrayList<Lane> ln = new ArrayList<>();
         for (int i = 0; i < lanes.length; i++) {
@@ -676,42 +675,41 @@ public class Importer {
                 lanes = vsLanes;
             }
         }
-
-        // Get the list of lanes with the topmost parent name
-        ArrayList<Lane> foundLanes = findLanesFromName(brd.lanes, lanes[0]);
-
-        // If too many of these, then barf
-        if (foundLanes.size() > 1) {
-            dpf("Ambiguous lane name %s on board %s\n", name, brd.id);
-            return null;
-        }
-
-        if (foundLanes.size() == 0) {
-            dpf("Cannot find lane of name %s on board %s\n", name, brd.id);
-            return null;
-        }
-        // Use the first found
-        Lane foundLane = foundLanes.get(0);
-        // We have already found a lane, so set loop counter to 1
-        // Integer j = 1;
-        for (int j = 1; j < lanes.length; j++) {
-
-            // do {
-            // Get those that have this as a parent
-            foundLanes = findLanesFromParentId(brd.lanes, foundLane.id);
-            if (foundLanes != null) {
-                // Make sure we only have the one child of that name
-                if (foundLanes.size() == 1) {
-                    foundLane = foundLanes.get(0);
-                } else {
-                    dpf("Ambiguous lane name %s in path %s on board %s\n", foundLane.name, name, brd.id);
-                    return null;
-                }
-            } else {
-                return null;
+        ArrayList<Lane> searchLanes = new ArrayList<>(Arrays.asList(brd.lanes));
+        int j = 0;
+        ArrayList<Lane> lanesToCheck = findLanesFromName(searchLanes, lanes[j]);
+        do {   
+            if (++j >= lanes.length) {
+                searchLanes = lanesToCheck;
+                break;
             }
+            Iterator<Lane> lIter = lanesToCheck.iterator();
+            while (lIter.hasNext()) {
+                ArrayList<Lane> foundLanes = new ArrayList<>();
+                Lane ln = lIter.next();
+                ArrayList<Lane> childLanes = findLanesFromParentId(brd.lanes, ln.id);
+                Iterator<Lane> clIter = childLanes.iterator();
+                while (clIter.hasNext()) {
+                    Lane cl = clIter.next();
+                    if (cl.name.equals(lanes[j])){
+                        foundLanes.add(cl);
+                    }
+                }
+                if ( foundLanes.size() > 0){
+                    lanesToCheck = foundLanes;
+                }
+            }
+
+        } while(true);
+
+        if (searchLanes.size() == 0) {
+            dpf("Cannot find lane \"%s\"on board \"%s\"\n", name, brd.title);
         }
-        return foundLane;
+        if (searchLanes.size() > 1) {
+            dpf("Ambiguous lane name \"%s\"on board \"%s\"\n", name, brd.title);
+        }
+
+        return searchLanes.get(0);
     }
 
     private Id updateCard(LeanKitAccess lka, Board brd, Card card, JSONObject fieldLst) {
@@ -820,8 +818,14 @@ public class Importer {
 
         }
         Id id = new Id();
-        id.id = lka.updateCardFromId(brd, card, finalUpdates).id;
-        return id;
+        Card upc = lka.updateCardFromId(brd, card, finalUpdates);
+        if (upc != null){
+            id.id = upc.id;
+            return id;
+        }
+        else {
+            return null;
+        }
     }
 
     private XSSFSheet findSheet(String name) {

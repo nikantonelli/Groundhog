@@ -59,10 +59,7 @@ public class LeanKitAccess {
         JSONObject jresp = new JSONObject(bd);
         // Convert to a type to return to caller.
         if (bd != null) {
-            if (jresp.has("error")) {
-                dpf("ERROR: \"%s\" gave response: \"%s\"", request.getRequestLine(), jresp.toString());
-                System.exit(1);
-            } else if (jresp.has("statusCode")) {
+            if (jresp.has("error") || jresp.has("statusCode")) {
                 dpf("ERROR: \"%s\" gave response: \"%s\"", request.getRequestLine(), jresp.toString());
                 System.exit(1);
             } else if (jresp.has("pageMeta")) {
@@ -158,11 +155,13 @@ public class LeanKitAccess {
      */
     public <T> T execute(Class<T> expectedResponseType) {
         String result = processRequest();
-        ObjectMapper om = new ObjectMapper();
-        try {
-            return om.readValue(result, expectedResponseType);
-        } catch (JsonProcessingException e) {
-            e.printStackTrace();
+        if (result != null) {
+            ObjectMapper om = new ObjectMapper();
+            try {
+                return om.readValue(result, expectedResponseType);
+            } catch (JsonProcessingException e) {
+                e.printStackTrace();
+            }
         }
         return null;
     }
@@ -195,22 +194,38 @@ public class LeanKitAccess {
                 {
                     break;
                 }
-                case 429: {
+                case 429: { // Flow control
                     Integer retryAfter = Integer.parseInt(httpResponse.getHeaders("retry-after")[0].getValue());
                     dpf("Received 429 status. waiting %.2f seconds\n", ((1.0 * retryAfter) / 1000.0));
                     try {
                         Thread.sleep(retryAfter);
                     } catch (InterruptedException e) {
-                        dpf("%s", e.getMessage());
+
+                        result = processRequest();
+                        break;
                     }
-                    result = processRequest();
-                    break;
+                }
+                case 422: { // Unprocessable Parameter
+                    dpf("Parameter Error in request: %s\n", request.toString());
+                    return null;
+                }
+                case 404: { // Item not found
+                    dpf("Item not found: %s %s\n", httpResponse.getStatusLine().getStatusCode(),
+                            httpResponse.getStatusLine().getReasonPhrase());
+                    return null;
+                }
+                case 503: { // Service unavailable
+                    dpf("Received 503 status. retrying in 5 seconds\n");
+                    try {
+                        Thread.sleep(5000);
+                    } catch (InterruptedException e) {
+                        break;
+                    }
                 }
                 default: {
                     dpf("Network fault: %s %s\n", httpResponse.getStatusLine().getStatusCode(),
                             httpResponse.getStatusLine().getReasonPhrase());
-                    System.exit(1);
-
+                    return null;
                 }
             }
         } catch (IOException e) {
@@ -375,7 +390,6 @@ public class LeanKitAccess {
         return execute(User.class);
     }
 
-
     public Card updateCardFromId(Board brd, Card card, JSONObject updates) {
 
         // Create Leankit updates from the list
@@ -386,9 +400,8 @@ public class LeanKitAccess {
             JSONObject values = (JSONObject) updates.get(key);
             switch (key) {
                 case "blockReason": {
-                    if (    values.get("value1").toString().startsWith("-") || 
-                            (values.get("value1").toString().equals("")) ||
-                            (values.get("value1").toString().length() == 1)) { 
+                    if (values.get("value1").toString().startsWith("-") || (values.get("value1").toString().equals(""))
+                            || (values.get("value1").toString().length() == 1)) {
                         // Make it startsWith as well as equals just in
                         // case user forgets
                         JSONObject upd = new JSONObject();
@@ -470,8 +483,9 @@ public class LeanKitAccess {
                     JSONObject link = new JSONObject();
                     JSONObject upd = new JSONObject();
                     String[] bits = values.get("value1").toString().split(",");
-                    if (bits.length !=2) {
-                        dpf ("Could not extract externalLink from %s (possible ',' in label?)", values.get("value1").toString());
+                    if (bits.length != 2) {
+                        dpf("Could not extract externalLink from %s (possible ',' in label?)",
+                                values.get("value1").toString());
                         break;
                     }
                     link.put("label", bits[0]);

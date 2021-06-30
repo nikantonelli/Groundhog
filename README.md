@@ -34,7 +34,7 @@ the XLSX spreadsheet to read from
 -g \<group\>  Allows you to group the changes into blocks
 
 ## Example command line
-java -jar target\Groundhog-2.0-spring-boot.jar -f "Scrum Teams.xlsx" -g 2
+java -jar target\Groundhog-2.0-spring-boot.jar -f "Team Import.xlsx" -g 2
 
 ## Config data
 
