@@ -420,10 +420,10 @@ public class Importer {
                 }
 
             }
-            ActionThread thr = new ActionThread(config, changesSht, iSht, change, item);
+            ActionThread thr = new ActionThread(config, changesSht, iSht, change, item, debugPrint);
             thr.start();
         }
-        dpf("\n"); // Finish up the dotting.....
+        dpf("Done\n"); // Finish up the dotting.....
     }
 
     private XSSFSheet findSheet(String name) {

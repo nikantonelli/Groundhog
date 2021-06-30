@@ -71,12 +71,13 @@ public class ActionThread extends Thread {
         }
     }
     
-    public ActionThread( Configuration cfg, XSSFSheet cSht, XSSFSheet iSht, Row chg, Row itm){
+    public ActionThread( Configuration cfg, XSSFSheet cSht, XSSFSheet iSht, Row chg, Row itm, Boolean dbg){
         changesSht = cSht;
         itemSht = iSht;
         change = chg;
         item = itm;
         config = cfg;
+        debugPrint = dbg;
     }
 
     public void run(){
@@ -149,7 +150,7 @@ public class ActionThread extends Thread {
             Id card = createCard(lka, brd, flds); // Change from human readable to API fields on
                                                   // the way
             if (card == null) {
-                dpf("Could not create card on board %s with details: %s", boardNumber, fieldLst.toString());
+                dpf("Could not create card on board \"%s\" with details: \"%s\"\n", boardNumber, fieldLst.toString());
                 System.exit(1);
             }
             return;
@@ -169,8 +170,11 @@ public class ActionThread extends Thread {
             fld.put(change.getCell(fieldCol).getStringCellValue(), vals);
             Id id = updateCard(lka, brd, card, fld);
             if (id == null) {
-                dpf("Could not modify card on board %s with details:\"%s\"\n", boardNumber, fld.toString());
+                dpf("Could not modify card on board \"%s\" with details:\"%s\"\n", boardNumber, fld.toString());
                 System.exit(1);
+            }
+            else {
+                dpf("Card  \"%s\" with details:\"%s\"\n", id.id, fld.toString());
             }
             return;
         }
