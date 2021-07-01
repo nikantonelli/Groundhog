@@ -199,10 +199,11 @@ public class LeanKitAccess {
                     dpf("Received 429 status. waiting %.2f seconds\n", ((1.0 * retryAfter) / 1000.0));
                     try {
                         Thread.sleep(retryAfter);
-                    } catch (InterruptedException e) {
-
                         result = processRequest();
                         break;
+                    } catch (InterruptedException e) {
+                        dpf("Premature wake from 429 delay - exiting");
+                        System.exit(1);
                     }
                 }
                 case 422: { // Unprocessable Parameter
@@ -218,6 +219,8 @@ public class LeanKitAccess {
                     dpf("Received 503 status. retrying in 5 seconds\n");
                     try {
                         Thread.sleep(5000);
+                        result = processRequest();
+                        break;
                     } catch (InterruptedException e) {
                         break;
                     }

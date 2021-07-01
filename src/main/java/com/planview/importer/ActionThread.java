@@ -150,7 +150,7 @@ public class ActionThread extends Thread {
             Id card = createCard(lka, brd, flds); // Change from human readable to API fields on
                                                   // the way
             if (card == null) {
-                dpf("Could not create card on board \"%s\" with details: \"%s\"\n", boardNumber, fieldLst.toString());
+                dpf("Could not create card on board \"%s\" with details: \"%s\"\n", boardNumber, flds.toString());
                 System.exit(1);
             }
             return;
