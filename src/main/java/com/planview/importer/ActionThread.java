@@ -30,6 +30,7 @@ public class ActionThread extends Thread {
     XSSFSheet itemSht = null;
     Row change = null;
     Row item = null;
+    SaveThread saver = null;
 
     private Integer findColumnFromName(Row firstRow, String name) {
         Iterator<Cell> frtc = firstRow.iterator();
@@ -71,13 +72,14 @@ public class ActionThread extends Thread {
         }
     }
     
-    public ActionThread( Configuration cfg, XSSFSheet cSht, XSSFSheet iSht, Row chg, Row itm, Boolean dbg){
+    public ActionThread( SaveThread svr, Configuration cfg, XSSFSheet cSht, XSSFSheet iSht, Row chg, Row itm, Boolean dbg){
         changesSht = cSht;
         itemSht = iSht;
         change = chg;
         item = itm;
         config = cfg;
         debugPrint = dbg;
+        saver = svr;
     }
 
     public void run(){
@@ -151,8 +153,10 @@ public class ActionThread extends Thread {
                                                   // the way
             if (card == null) {
                 dpf("Could not create card on board \"%s\" with details: \"%s\"\n", boardNumber, flds.toString());
-                System.exit(1);
+                saver.removeUpdate(new UpdateRecord(itemSht.getSheetName(), item.getRowNum(), null));
+                return;
             }
+            saver.removeUpdate(new UpdateRecord(itemSht.getSheetName(), item.getRowNum(), card.id));
             return;
 
         } else if (change.getCell(actionCol).getStringCellValue().equals("Modify")) {

@@ -321,6 +321,7 @@ public class Importer {
         // Find all the change records for today
         Iterator<Row> row = changesSht.iterator();
         ArrayList<Row> todaysChanges = new ArrayList<Row>();
+        SaveThread saver = null;
 
         dayCol = findColumnFromSheet(changesSht, "Group");
         itemShtCol = findColumnFromSheet(changesSht, "Item Sheet");
@@ -358,6 +359,12 @@ public class Importer {
         // Now scan through the changes doing the actions
         Iterator<Row> cItor = todaysChanges.iterator();
         Row item = null;
+
+        if (cItor.hasNext()) {
+            //Create a file save thread
+            saver = new SaveThread(xlsxfn, wb, debugPrint);
+        }
+
         while (cItor.hasNext()) {
             Row change = cItor.next();
             // Get the item that this change refers to
@@ -420,7 +427,8 @@ public class Importer {
                 }
 
             }
-            ActionThread thr = new ActionThread(config, changesSht, iSht, change, item, debugPrint);
+            saver.addUpdate(new UpdateRecord(iSht.getSheetName(),item.getRowNum(),""));
+            ActionThread thr = new ActionThread(saver, config, changesSht, iSht, change, item, debugPrint);
             thr.start();
         }
         dpf("Done\n"); // Finish up the dotting.....
