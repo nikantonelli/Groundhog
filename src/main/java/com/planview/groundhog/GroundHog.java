@@ -865,7 +865,7 @@ public class GroundHog {
             Id card = createCard(lka, brd, flds); // Change from human readable to API fields on
                                                   // the way
             if (card == null) {
-                dpf("Could not create card on board %s with details: %s", boardNumber, fieldLst.toString());
+                dpf("Could not create card on board \"%s\" with details: \"%s\"", boardNumber, flds.toString());
                 System.exit(1);
             }
             return card.id;
