@@ -104,6 +104,7 @@ public class GroundHog {
                         if (useUpdatePeriod) {
                             then.add(Calendar.SECOND, updatePeriod);
                         } else {
+                            then.add(Calendar.HOUR,24);
                             then.set(Calendar.HOUR_OF_DAY, 3); // Set to three in the morning
                             then.set(Calendar.MINUTE, 0);
                             then.set(Calendar.SECOND, 0);
