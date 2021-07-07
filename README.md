@@ -45,9 +45,13 @@ run through the list once
 'day' update rate in seconds. Must be used without '-c' option. A rate of zero seconds will 
               make the code wait for user input before going to a days updates
 
+-b \<day\>
+
+Used in conjunction with -u to indicate which day to start from.
+
 -d \<mode\>    
 
-delete all user created cards (not from spreadsheet) where mode is 'day' (at the start
+delete all user created cards (not created by spreadsheet) where mode is 'day' (at the start
               of every day processing), 'cycle' (at the end of the cycle)
 
 -m \<lane\>     
