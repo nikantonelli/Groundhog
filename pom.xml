@@ -57,6 +57,12 @@
             <artifactId>slf4j-simple</artifactId>
             <version>1.7.30</version>
         </dependency>
+    
+      <dependency>
+        <groupId>org.apache.httpcomponents</groupId>
+        <artifactId>httpmime</artifactId>
+        <version>4.5.9</version>
+      </dependency>
     </dependencies>
     <build>
         <plugins>

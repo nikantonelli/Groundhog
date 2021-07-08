@@ -1,5 +1,8 @@
 package com.planview.groundhog.Leankit;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
@@ -12,6 +15,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpDelete;
@@ -21,7 +25,11 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.client.utils.URIBuilder;
+import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
+import org.apache.http.entity.mime.HttpMultipartMode;
+import org.apache.http.entity.mime.MultipartEntityBuilder;
+import org.apache.http.entity.mime.content.FileBody;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 
@@ -56,6 +64,8 @@ public class LeanKitAccess {
 
     public <T> ArrayList<T> read(Class<T> expectedResponseType) {
 
+        request.setHeader("Accept", "application/json");
+        request.setHeader("Content-type", "application/json");
         String bd = processRequest();
         JSONObject jresp = new JSONObject(bd);
         // Convert to a type to return to caller.
@@ -155,6 +165,9 @@ public class LeanKitAccess {
      *         Create something and return just the id to it.
      */
     public <T> T execute(Class<T> expectedResponseType) {
+        request.setHeader("Accept", "application/json");
+        request.setHeader("Content-type", "application/json");
+
         String result = processRequest();
         if (result != null) {
             ObjectMapper om = new ObjectMapper();
@@ -173,8 +186,6 @@ public class LeanKitAccess {
         HttpClient client = HttpClients.createDefault();
         HttpResponse httpResponse = null;
         String result = null;
-        request.setHeader("Accept", "application/json");
-        request.setHeader("Content-type", "application/json");
         try {
             // Add the user credentials to the request
             if (config.apikey != null) {
@@ -367,6 +378,26 @@ public class LeanKitAccess {
         return null;
     }
 
+    public String sendAttachment(String id, String filename) {
+        request = new HttpPost(config.url + "/io/card/" + id + "/attachment");
+        URI uri = null;
+        try {
+            uri = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "false").build();
+            ((HttpRequestBase) request).setURI(uri);
+        } catch (URISyntaxException e) {
+            dpf("%s", e.getMessage());
+            System.exit(1);
+        }
+        File atchmt = new File(filename);
+        FileBody fb = new FileBody(atchmt);
+        MultipartEntityBuilder mpeb = MultipartEntityBuilder.create().setMode(HttpMultipartMode.BROWSER_COMPATIBLE)
+                .addTextBody("Description", "Auto-generated from Script").addPart(filename, fb);
+        HttpEntity ent = mpeb.build();
+        ((HttpPost) request).setEntity(ent);
+        String status = processRequest();
+        return status;
+    }
+
     public Card fetchCard(String id) {
         request = new HttpGet(config.url + "/io/card/" + id);
         URI uri = null;
@@ -416,15 +447,15 @@ public class LeanKitAccess {
             JSONObject values = (JSONObject) updates.get(key);
             switch (key) {
                 case "blockReason": {
-                    if (values.get("value1").toString().length() <=1) {
-                   
+                    if (values.get("value1").toString().length() <= 1) {
+
                         JSONObject upd = new JSONObject();
                         upd.put("op", "replace");
                         upd.put("path", "/isBlocked");
                         upd.put("value", false);
                         jsa.put(upd);
 
-                    } else  if (values.get("value1").toString().startsWith("-")) {
+                    } else if (values.get("value1").toString().startsWith("-")) {
                         // Make it startsWith rather than equals just
                         // in case user forgets
                         JSONObject upd1 = new JSONObject();
@@ -562,12 +593,10 @@ public class LeanKitAccess {
                     }
                     break;
                 }
-                // case "attachments": {
-                //     //Check we can open the file, then find its size.
-                //     //We are going to construct a mutlipart webform to post to LK
-                //     //And then do an update to add the attachment to the card
-                //     break;
-                // }
+                case "attachments": {
+                    sendAttachment(card.id, values.get("value1").toString());
+                    break;
+                }
                 case "CustomField": {
                     CustomField[] cflds = brd.customFields;
                     if (cflds != null) {
@@ -588,7 +617,7 @@ public class LeanKitAccess {
                     }
                     break;
                 }
-                //Mismatch between UI and database in LK.
+                // Mismatch between UI and database in LK.
                 case "priority": {
                     JSONObject upd = new JSONObject();
                     upd.put("op", "replace");
