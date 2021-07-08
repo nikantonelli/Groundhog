@@ -1079,6 +1079,7 @@ public class GroundHog {
                     }
                     break;
                 }
+                //case "attachments":
                 default:
                     // Make Sure field names from speadsheet are part of the Card model.... or....
                     Field[] fld = Card.class.getFields();

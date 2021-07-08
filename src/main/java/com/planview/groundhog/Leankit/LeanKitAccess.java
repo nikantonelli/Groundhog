@@ -416,15 +416,27 @@ public class LeanKitAccess {
             JSONObject values = (JSONObject) updates.get(key);
             switch (key) {
                 case "blockReason": {
-                    if (values.get("value1").toString().startsWith("-")) { // Make it startsWith rather than equals just
-                                                                           // in
-                        // case user forgets
+                    if (values.get("value1").toString().length() <=1) {
+                   
                         JSONObject upd = new JSONObject();
                         upd.put("op", "replace");
                         upd.put("path", "/isBlocked");
                         upd.put("value", false);
                         jsa.put(upd);
 
+                    } else  if (values.get("value1").toString().startsWith("-")) {
+                        // Make it startsWith rather than equals just
+                        // in case user forgets
+                        JSONObject upd1 = new JSONObject();
+                        upd1.put("op", "replace");
+                        upd1.put("path", "/isBlocked");
+                        upd1.put("value", false);
+                        jsa.put(upd1);
+                        JSONObject upd2 = new JSONObject();
+                        upd2.put("op", "add");
+                        upd2.put("path", "/blockReason");
+                        upd2.put("value", values.get("value1").toString().substring(1));
+                        jsa.put(upd2);
                     } else {
                         JSONObject upd1 = new JSONObject();
                         upd1.put("op", "replace");
@@ -550,6 +562,12 @@ public class LeanKitAccess {
                     }
                     break;
                 }
+                // case "attachments": {
+                //     //Check we can open the file, then find its size.
+                //     //We are going to construct a mutlipart webform to post to LK
+                //     //And then do an update to add the attachment to the card
+                //     break;
+                // }
                 case "CustomField": {
                     CustomField[] cflds = brd.customFields;
                     if (cflds != null) {
@@ -569,6 +587,14 @@ public class LeanKitAccess {
                         }
                     }
                     break;
+                }
+                //Mismatch between UI and database in LK.
+                case "priority": {
+                    JSONObject upd = new JSONObject();
+                    upd.put("op", "replace");
+                    upd.put("path", "/" + key);
+                    upd.put("value", values.get("value1").toString().toLowerCase());
+                    jsa.put(upd);
                 }
                 default: {
                     JSONObject upd = new JSONObject();
