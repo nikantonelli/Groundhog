@@ -92,8 +92,11 @@ public class LeanKitAccess {
                     case "Card":
                         fieldName = "cards";
                         break;
+                    case "Comment":
+                        fieldName = "comments";
+                        break;
                     default:
-                        dpf("%s", "Incorrect item type returned from server API");
+                        dpf("Incorrect item type returned from server API\n");
                 }
                 if (fieldName != null) {
                     // Got something to return
@@ -292,17 +295,13 @@ public class LeanKitAccess {
         }
     }
 
-    public ArrayList<Card> fetchCardsFromBoard(String id) {
-        request = new HttpGet(config.url + "io/card");
-        URI uriA = null;
-        try {
-            uriA = new URIBuilder(request.getURI()).setParameter("board", id).build();
-            ((HttpRequestBase) request).setURI(uriA);
-        } catch (URISyntaxException e) {
-            dpf("%s", e.getMessage());
-            System.exit(1);
-        }
+    public ArrayList<Comment> fetchCommentsForCard(Card cd) {
+        request = new HttpGet(config.url + "io/card/" + cd.id + "/comment");
+        return read(Comment.class);
+    }
 
+    public ArrayList<Card> fetchCardIDsFromBoard(String id) {
+        request = new HttpGet(config.url + "io/card?board=" + id + "&deleted=0&only=id");
         // Once you get the boards, you could cache them. There may be loads, but
         // shouldn't max
         // out memory.
@@ -378,7 +377,7 @@ public class LeanKitAccess {
         return null;
     }
 
-    public String sendAttachment(String id, String filename) {
+    private String sendAttachment(String id, String filename) {
         request = new HttpPost(config.url + "/io/card/" + id + "/attachment");
         URI uri = null;
         try {
@@ -396,6 +395,19 @@ public class LeanKitAccess {
         ((HttpPost) request).setEntity(ent);
         String status = processRequest();
         return status;
+    }
+
+    private String postComment(String id, String comment) {
+        request = new HttpPost(config.url + "/io/card/" + id + "/comment");
+        JSONObject ent = new JSONObject();
+        ent.put("text", comment);
+        try {
+            ((HttpPost) request).setEntity(new StringEntity(ent.toString()));
+        } catch (UnsupportedEncodingException e) {
+            return null;
+        }
+        Comment c = execute(Comment.class);
+        return c.id;
     }
 
     public Card fetchCard(String id) {
@@ -597,6 +609,12 @@ public class LeanKitAccess {
                     sendAttachment(card.id, values.get("value1").toString());
                     break;
                 }
+
+                case "comments": {
+                    postComment(card.id, values.get("value1").toString());
+                    break;
+                }
+
                 case "CustomField": {
                     CustomField[] cflds = brd.customFields;
                     if (cflds != null) {

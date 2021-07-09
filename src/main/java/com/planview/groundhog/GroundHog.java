@@ -21,6 +21,7 @@ import java.util.Scanner;
 import com.planview.groundhog.Leankit.Board;
 import com.planview.groundhog.Leankit.Card;
 import com.planview.groundhog.Leankit.CardType;
+import com.planview.groundhog.Leankit.Comment;
 import com.planview.groundhog.Leankit.CustomField;
 import com.planview.groundhog.Leankit.Id;
 import com.planview.groundhog.Leankit.Lane;
@@ -45,6 +46,8 @@ import org.json.JSONObject;
 
 public class GroundHog {
 
+    private static final String OUR_GROUNDHOG_TAG = "groundhog2-generated";
+
     static Boolean debugPrint = false;
 
     Integer refreshPeriod = 14; // Number of days to run for by default
@@ -60,6 +63,7 @@ public class GroundHog {
     static Boolean useUpdatePeriod = false;
     static Integer startDay = -1;
     static Boolean cycleOnce = false;
+    static Boolean tidyCards = false;
 
     /**
      * One line sheet that contains the credentials to access the Leankit Server
@@ -104,7 +108,7 @@ public class GroundHog {
                         if (useUpdatePeriod) {
                             then.add(Calendar.SECOND, updatePeriod);
                         } else {
-                            then.add(Calendar.HOUR,24);
+                            then.add(Calendar.HOUR, 24);
                             then.set(Calendar.HOUR_OF_DAY, 3); // Set to three in the morning
                             then.set(Calendar.MINUTE, 0);
                             then.set(Calendar.SECOND, 0);
@@ -256,6 +260,10 @@ public class GroundHog {
         dbp.setRequired(false);
         opts.addOption(dbp);
 
+        Option tidyUp = new Option("t", "tidyup", false, "Delete cards without GroundHog comment");
+        tidyUp.setRequired(false);
+        opts.addOption(tidyUp);
+
         CommandLineParser p = new DefaultParser();
         HelpFormatter hf = new HelpFormatter();
         CommandLine cl = null;
@@ -292,6 +300,9 @@ public class GroundHog {
             cycleOnce = true;
         }
 
+        if (cl.hasOption("tidyup")) {
+            tidyCards = true;
+        }
         if (cl.hasOption("delete")) {
             deleteItems = cl.getOptionValue("delete");
         }
@@ -498,6 +509,19 @@ public class GroundHog {
         return col;
     }
 
+    private Boolean hasOurTag(Card cd) {
+        LeanKitAccess lka = new LeanKitAccess(config, debugPrint);
+        ArrayList<Comment> cl = lka.fetchCommentsForCard(cd);
+        if (cl != null) {
+            for (int i = 0; i < cl.size(); i++) {
+                if (cl.get(i).text.equals(OUR_GROUNDHOG_TAG)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private void deleteUserItems() {
 
         // Collate all the boards in the items sheets and get their IDs
@@ -546,19 +570,18 @@ public class GroundHog {
                 dpf("Could not locate board \"%s\"\n", bName);
                 return;
             }
-            ArrayList<Card> cards = lka.fetchCardsFromBoard(brd.id);
+            ArrayList<Card> cards = lka.fetchCardIDsFromBoard(brd.id);
+            ArrayList<Card> removeCards = new ArrayList<>();
             if (cards != null) {
                 Iterator<Card> cIter = cards.iterator();
                 while (cIter.hasNext()) {
                     Card cd = cIter.next();
-                    if (cLst.contains(cd.id)) {
-                        cards.remove(cd);
-                        cIter = cards.iterator();
+                    if (!hasOurTag(cd)) {
+                        removeCards.add(cd);
                     }
                 }
-                leftOvers.addAll(cards);
-            }
-            else {
+                leftOvers.addAll(removeCards);
+            } else {
                 return;
             }
         }
@@ -845,6 +868,7 @@ public class GroundHog {
 
         if (change.getCell(actionCol).getStringCellValue().equals("Create")) {
             // Now 'translate' the spreadsheet name:col pairs to fieldName:value pairs
+
             Iterator<String> keys = fieldLst.keys();
             JSONObject flds = new JSONObject();
 
@@ -856,6 +880,11 @@ public class GroundHog {
                     flds.put(key, vals);
                 }
             }
+
+            // Add out tag to every card created
+            JSONObject dc = new JSONObject();
+            dc.put("value1", OUR_GROUNDHOG_TAG);
+            flds.put("comments", dc);
 
             /**
              * We need to either 'create' if ID == null && action == 'Create' or update if
@@ -876,7 +905,8 @@ public class GroundHog {
             Card card = lka.fetchCard(item.getCell(idCol).getStringCellValue());
 
             if (card == null) {
-                dpf("Could not locate card \"%s\" on board \"%s\"\n", item.getCell(idCol).getStringCellValue(), boardNumber);
+                dpf("Could not locate card \"%s\" on board \"%s\"\n", item.getCell(idCol).getStringCellValue(),
+                        boardNumber);
             }
             JSONObject fld = new JSONObject();
             JSONObject vals = new JSONObject();
@@ -975,7 +1005,7 @@ public class GroundHog {
         ArrayList<Lane> searchLanes = new ArrayList<>(Arrays.asList(brd.lanes));
         int j = 0;
         ArrayList<Lane> lanesToCheck = findLanesFromName(searchLanes, lanes[j]);
-        do {   
+        do {
             if (++j >= lanes.length) {
                 searchLanes = lanesToCheck;
                 break;
@@ -988,16 +1018,16 @@ public class GroundHog {
                 Iterator<Lane> clIter = childLanes.iterator();
                 while (clIter.hasNext()) {
                     Lane cl = clIter.next();
-                    if (cl.name.equals(lanes[j])){
+                    if (cl.name.equals(lanes[j])) {
                         foundLanes.add(cl);
                     }
                 }
-                if ( foundLanes.size() > 0){
+                if (foundLanes.size() > 0) {
                     lanesToCheck = foundLanes;
                 }
             }
 
-        } while(true);
+        } while (true);
 
         if (searchLanes.size() == 0) {
             dpf("Cannot find lane \"%s\"on board \"%s\"\n", name, brd.title);
@@ -1079,7 +1109,7 @@ public class GroundHog {
                     }
                     break;
                 }
-                //case "attachments":
+                // case "attachments":
                 default:
                     // Make Sure field names from speadsheet are part of the Card model.... or....
                     Field[] fld = Card.class.getFields();
@@ -1117,11 +1147,10 @@ public class GroundHog {
         }
         Id id = new Id();
         Card upc = lka.updateCardFromId(brd, card, finalUpdates);
-        if (upc != null){
+        if (upc != null) {
             id.id = upc.id;
             return id;
-        }
-        else {
+        } else {
             return null;
         }
     }
