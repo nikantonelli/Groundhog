@@ -1,19 +1,18 @@
 package com.planview.groundhog.Leankit;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.Base64;
+import java.util.Iterator;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.planview.groundhog.Configuration;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -25,19 +24,15 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.client.utils.URIBuilder;
-import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.entity.mime.HttpMultipartMode;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.entity.mime.content.FileBody;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-
-import com.planview.groundhog.Configuration;
 
 public class LeanKitAccess {
 
@@ -96,7 +91,7 @@ public class LeanKitAccess {
                         fieldName = "comments";
                         break;
                     default:
-                        dpf("Incorrect item type returned from server API\n");
+                        dpf("Unsupported item type returned from server API\n");
                 }
                 if (fieldName != null) {
                     // Got something to return

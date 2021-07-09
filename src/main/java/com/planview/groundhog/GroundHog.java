@@ -63,7 +63,6 @@ public class GroundHog {
     static Boolean useUpdatePeriod = false;
     static Integer startDay = -1;
     static Boolean cycleOnce = false;
-    static Boolean tidyCards = false;
 
     /**
      * One line sheet that contains the credentials to access the Leankit Server
@@ -260,10 +259,6 @@ public class GroundHog {
         dbp.setRequired(false);
         opts.addOption(dbp);
 
-        Option tidyUp = new Option("t", "tidyup", false, "Delete cards without GroundHog comment");
-        tidyUp.setRequired(false);
-        opts.addOption(tidyUp);
-
         CommandLineParser p = new DefaultParser();
         HelpFormatter hf = new HelpFormatter();
         CommandLine cl = null;
@@ -300,9 +295,6 @@ public class GroundHog {
             cycleOnce = true;
         }
 
-        if (cl.hasOption("tidyup")) {
-            tidyCards = true;
-        }
         if (cl.hasOption("delete")) {
             deleteItems = cl.getOptionValue("delete");
         }
