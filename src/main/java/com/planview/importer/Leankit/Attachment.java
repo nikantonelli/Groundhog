@@ -3,7 +3,8 @@ package com.planview.importer.Leankit;
 import java.util.Date;
 
 public class Attachment {
-    public String id, text;
-    public User createdBy;
-    public Date createdOn;
+    public String id, text, storageId, name, description;
+    public User createdBy, changedBy;
+    public Date createdOn, updatedOn;
+    public Integer attachmentSize;
 }

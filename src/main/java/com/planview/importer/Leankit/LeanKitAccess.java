@@ -1,5 +1,6 @@
 package com.planview.importer.Leankit;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
@@ -13,6 +14,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.planview.importer.Configuration;
 
+import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpDelete;
@@ -22,7 +24,11 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.client.utils.URIBuilder;
+import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
+import org.apache.http.entity.mime.HttpMultipartMode;
+import org.apache.http.entity.mime.MultipartEntityBuilder;
+import org.apache.http.entity.mime.content.FileBody;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 
@@ -81,8 +87,11 @@ public class LeanKitAccess {
                     case "Card":
                         fieldName = "cards";
                         break;
+                    case "Comment":
+                        fieldName = "comments";
+                        break;
                     default:
-                        dpf("%s", "Incorrect item type returned from server API");
+                        dpf("Unsupported item type returned from server API\n");
                 }
                 if (fieldName != null) {
                     // Got something to return
@@ -364,6 +373,39 @@ public class LeanKitAccess {
         return null;
     }
 
+    private String sendAttachment(String id, String filename) {
+        request = new HttpPost(config.url + "/io/card/" + id + "/attachment");
+        URI uri = null;
+        try {
+            uri = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "false").build();
+            ((HttpRequestBase) request).setURI(uri);
+        } catch (URISyntaxException e) {
+            dpf("%s", e.getMessage());
+            System.exit(1);
+        }
+        File atchmt = new File(filename);
+        FileBody fb = new FileBody(atchmt);
+        MultipartEntityBuilder mpeb = MultipartEntityBuilder.create().setMode(HttpMultipartMode.BROWSER_COMPATIBLE)
+                .addTextBody("Description", "Auto-generated from Script").addPart(filename, fb);
+        HttpEntity ent = mpeb.build();
+        ((HttpPost) request).setEntity(ent);
+        String status = processRequest();
+        return status;
+    }
+
+    private String postComment(String id, String comment) {
+        request = new HttpPost(config.url + "/io/card/" + id + "/comment");
+        JSONObject ent = new JSONObject();
+        ent.put("text", comment);
+        try {
+            ((HttpPost) request).setEntity(new StringEntity(ent.toString()));
+        } catch (UnsupportedEncodingException e) {
+            return null;
+        }
+        Comment c = execute(Comment.class);
+        return c.id;
+    }
+
     public Card fetchCard(String id) {
         request = new HttpGet(config.url + "/io/card/" + id);
         URI uri = null;
@@ -400,16 +442,27 @@ public class LeanKitAccess {
             JSONObject values = (JSONObject) updates.get(key);
             switch (key) {
                 case "blockReason": {
-                    if (values.get("value1").toString().startsWith("-") || (values.get("value1").toString().equals(""))
-                            || (values.get("value1").toString().length() == 1)) {
-                        // Make it startsWith as well as equals just in
-                        // case user forgets
+                    if (values.get("value1").toString().length() <= 1) {
+
                         JSONObject upd = new JSONObject();
                         upd.put("op", "replace");
                         upd.put("path", "/isBlocked");
                         upd.put("value", false);
                         jsa.put(upd);
 
+                    } else if (values.get("value1").toString().startsWith("-")) {
+                        // Make it startsWith rather than equals just
+                        // in case user forgets
+                        JSONObject upd1 = new JSONObject();
+                        upd1.put("op", "replace");
+                        upd1.put("path", "/isBlocked");
+                        upd1.put("value", false);
+                        jsa.put(upd1);
+                        JSONObject upd2 = new JSONObject();
+                        upd2.put("op", "add");
+                        upd2.put("path", "/blockReason");
+                        upd2.put("value", values.get("value1").toString().substring(1));
+                        jsa.put(upd2);
                     } else {
                         JSONObject upd1 = new JSONObject();
                         upd1.put("op", "replace");
@@ -513,6 +566,25 @@ public class LeanKitAccess {
                     }
                     break;
                 }
+                // Mismatch between UI and database in LK.
+                case "priority": {
+                    JSONObject upd = new JSONObject();
+                    upd.put("op", "replace");
+                    upd.put("path", "/" + key);
+                    upd.put("value", values.get("value1").toString().toLowerCase());
+                    jsa.put(upd);
+                    break;
+                }
+                case "attachments": {
+                    sendAttachment(card.id, values.get("value1").toString());
+                    break;
+                }
+
+                case "comments": {
+                    postComment(card.id, values.get("value1").toString());
+                    break;
+                }
+
                 case "CustomField": {
                     CustomField[] cflds = brd.customFields;
                     if (cflds != null) {

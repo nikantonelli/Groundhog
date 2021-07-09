@@ -3,8 +3,8 @@ package com.planview.importer.Leankit;
 import java.util.Date;
 
 public class Comment {
-    String id, text;
-    Date createdOn;
-    User createdBy;
-    String cardId;
+    public String id, text;
+    public Date createdOn;
+    public User createdBy;
+    public String cardId;
 }
