@@ -235,8 +235,7 @@ public class LeanKitAccess {
                     break;
                 }
                 default: {
-                    dpf("Network fault: %s %s\n", httpResponse.getStatusLine().getStatusCode(),
-                            httpResponse.getStatusLine().getReasonPhrase());
+                    dpf("Network fault: %s %s\n", httpResponse.toString());
                     return null;
                 }
             }
