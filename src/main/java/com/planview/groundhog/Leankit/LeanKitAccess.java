@@ -10,8 +10,6 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.Calendar;
-import java.util.Date;
 import java.util.Iterator;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -69,6 +67,9 @@ public class LeanKitAccess {
         request.setHeader("Accept", "application/json");
         request.setHeader("Content-type", "application/json");
         String bd = processRequest();
+        if (bd == null) {
+            return null;
+        }
         JSONObject jresp = new JSONObject(bd);
         // Convert to a type to return to caller.
         if (bd != null) {
@@ -262,8 +263,10 @@ public class LeanKitAccess {
     public ArrayList<CardType> fetchCardTypes(String boardId) {
         request = new HttpGet(config.url + "io/board/" + boardId + "/cardType");
         ArrayList<CardType> brd = read(CardType.class);
-        if (brd.size() > 0) {
-            return brd;
+        if (brd != null) {
+            if (brd.size() > 0) {
+                return brd;
+            }
         }
         return null;
     }
@@ -271,8 +274,10 @@ public class LeanKitAccess {
     public Lane[] fetchLanes(String boardId) {
         request = new HttpGet(config.url + "io/board/" + boardId + "/");
         ArrayList<Board> brd = read(Board.class);
-        if (brd.size() > 0) {
-            return brd.get(0).lanes;
+        if (brd != null) {
+            if (brd.size() > 0) {
+                return brd.get(0).lanes;
+            }
         }
         return null;
     }
@@ -313,8 +318,7 @@ public class LeanKitAccess {
 
         if (rewind >= 0) {
             request = new HttpGet(config.url + "io/card?board=" + id + "&deleted=0&only=id&since="
-                    + sinceDate.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-                    + "T00:00:00Z");
+                    + sinceDate.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) + "T00:00:00Z");
         } else {
             request = new HttpGet(config.url + "io/card?board=" + id + "&deleted=0&only=id");
         }
@@ -374,21 +378,23 @@ public class LeanKitAccess {
         }
 
         ArrayList<User> userd = read(User.class);
-
         User user = null;
-        if (userd.size() > 0) {
-            // We found one or more with this name search. First try to find an exact match
-            Iterator<User> uItor = userd.iterator();
-            while (uItor.hasNext()) {
-                User u = uItor.next();
-                if (u.emailAddress.equals(emailAddress)) {
-                    user = u;
+
+        if (userd != null) {
+            if (userd.size() > 0) {
+                // We found one or more with this name search. First try to find an exact match
+                Iterator<User> uItor = userd.iterator();
+                while (uItor.hasNext()) {
+                    User u = uItor.next();
+                    if (u.emailAddress.equals(emailAddress)) {
+                        user = u;
+                    }
                 }
+                // Then take the first if that fails
+                if (user == null)
+                    user = userd.get(0);
+                return user.id;
             }
-            // Then take the first if that fails
-            if (user == null)
-                user = userd.get(0);
-            return user.id;
         }
         return null;
     }
