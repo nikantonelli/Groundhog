@@ -211,7 +211,6 @@ public class LeanKitAccess {
                 request.addHeader("Authorization", "Basic " + Base64.getEncoder().encode(creds.getBytes()));
             }
             httpResponse = client.execute(request);
-            System.out.println(httpResponse.toString());
             switch (httpResponse.getStatusLine().getStatusCode()) {
                 case 200: // Card updated
                 case 201: // Card created
@@ -225,7 +224,7 @@ public class LeanKitAccess {
                 }
                 case 429: { // Flow control
                     LocalDateTime retryAfter = LocalDateTime.parse(httpResponse.getHeaders("retry-after")[0].getValue());
-                    LocalDateTime serverTime = LocalDateTime.parse(httpResponse.getHeaders("Date")[0].getValue());
+                    LocalDateTime serverTime = LocalDateTime.parse(httpResponse.getHeaders("date")[0].getValue());
                     Long timeDiff =  ChronoUnit.MILLIS.between(retryAfter, serverTime);
                     dpf("Received 429 status. waiting %.2f seconds\n", ((1.0 * timeDiff) / 1000.0));
                     try {
