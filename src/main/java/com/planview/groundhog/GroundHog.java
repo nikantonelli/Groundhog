@@ -34,6 +34,7 @@ import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DateUtil;
@@ -63,7 +64,7 @@ public class GroundHog {
     static Boolean useUpdatePeriod = false;
     static Integer startDay = -1;
     static Boolean cycleOnce = false;
-
+    static PoolingHttpClientConnectionManager cm = null;
     /**
      * One line sheet that contains the credentials to access the Leankit Server
      * Must contain columns "url", "username", "password" and "apiKey", but not
@@ -85,8 +86,10 @@ public class GroundHog {
 
     public static void main(String[] args) throws IOException, InterruptedException {
 
+        cm = new PoolingHttpClientConnectionManager();
+        cm.setMaxTotal(5);  //Recommendation for LK
+        
         GroundHog hog = new GroundHog();
-
         hog.getCommandLine(args);
         hog.parseXlsx();
         hog.getConfig();
@@ -185,7 +188,7 @@ public class GroundHog {
                 fos.close();
 
             } catch (IOException e) {
-                dpf("%s", e.getMessage()); // Any other error, we barf.
+                dpf("Error(1): %s", e.getMessage()); // Any other error, we barf.
                 System.exit(1);
             }
 
@@ -196,7 +199,7 @@ public class GroundHog {
     private static Integer checkWhatsNext(Integer day, GroundHog hog) {
         if (day >= hog.getRefresh()) {
             if (deleteItems.equals("cycle")) {
-                hog.deleteUserItems();
+                hog.deleteUserItems(day);
             }
             if (moveLane != null) {
                 hog.moveOurItems();
@@ -222,7 +225,7 @@ public class GroundHog {
             fos.flush();
             fos.close();
         } catch (IOException e) {
-            dpf("%s", e.getMessage());
+            dpf("Error(2): %s", e.getMessage());
             System.exit(1);
         }
     }
@@ -265,7 +268,7 @@ public class GroundHog {
         try {
             cl = p.parse(opts, args);
         } catch (ParseException e) {
-            dpf("%s", e.getMessage());
+            dpf("Error(3): %s", e.getMessage());
             hf.printHelp(" ", opts);
             System.exit(1);
         }
@@ -312,7 +315,7 @@ public class GroundHog {
         try {
             xlsxfis = new FileInputStream(new File(xlsxfn));
         } catch (FileNotFoundException e) {
-            dpf("%s", e.getMessage());
+            dpf("Error(4) %s", e.getMessage());
 
             System.exit(1);
 
@@ -321,7 +324,7 @@ public class GroundHog {
             wb = new XSSFWorkbook(xlsxfis);
             xlsxfis.close();
         } catch (IOException e) {
-            dpf("%s", e.getMessage());
+            dpf("Error(5) %s", e.getMessage());
             System.exit(1);
         }
 
@@ -433,7 +436,7 @@ public class GroundHog {
                         }
 
                     } catch (IllegalArgumentException | IllegalAccessException e) {
-                        dpf("%s", e.getMessage());
+                        dpf("Error(6) %s", e.getMessage());
                         System.exit(1);
                     }
 
@@ -502,7 +505,7 @@ public class GroundHog {
     }
 
     private Boolean hasOurTag(Card cd) {
-        LeanKitAccess lka = new LeanKitAccess(config, debugPrint);
+        LeanKitAccess lka = new LeanKitAccess(config, debugPrint, cm);
         ArrayList<Comment> cl = lka.fetchCommentsForCard(cd);
         if (cl != null) {
             for (int i = 0; i < cl.size(); i++) {
@@ -514,7 +517,7 @@ public class GroundHog {
         return false;
     }
 
-    private void deleteUserItems() {
+    private void deleteUserItems(Integer rewind) {
 
         // Collate all the boards in the items sheets and get their IDs
         // For each board, get the cards and check whether we have an ID that matches a
@@ -552,7 +555,7 @@ public class GroundHog {
         if ((bLst.size() == 0) || (cLst.size() == 0)) {
             return;
         }
-        LeanKitAccess lka = new LeanKitAccess(config, debugPrint);
+        LeanKitAccess lka = new LeanKitAccess(config, debugPrint, cm);
         Iterator<String> bIter = bLst.iterator();
         ArrayList<Card> leftOvers = new ArrayList<>();
         while (bIter.hasNext()) {
@@ -562,7 +565,8 @@ public class GroundHog {
                 dpf("Could not locate board \"%s\"\n", bName);
                 return;
             }
-            ArrayList<Card> cards = lka.fetchCardIDsFromBoard(brd.id);
+            dpf("Requesting card IDs from board \"%s\"\n", brd.id);
+            ArrayList<Card> cards = lka.fetchCardIDsFromBoard(brd.id, rewind);
             ArrayList<Card> removeCards = new ArrayList<>();
             if (cards != null) {
                 Iterator<Card> cIter = cards.iterator();
@@ -583,7 +587,7 @@ public class GroundHog {
     }
 
     private void moveOurItems() {
-        LeanKitAccess lka = new LeanKitAccess(config, debugPrint);
+        LeanKitAccess lka = new LeanKitAccess(config, debugPrint, cm);
         Iterator<Row> row = changesSht.iterator();
         row.next(); // Skip header
         while (row.hasNext()) {
@@ -673,7 +677,7 @@ public class GroundHog {
         }
 
         if (deleteItems.equals("day")) {
-            deleteUserItems();
+            deleteUserItems(0);
         }
 
         if (todaysChanges.size() == 0) {
@@ -741,9 +745,9 @@ public class GroundHog {
             } else {
                 // Check if this is a 'create' operation. If it is, ignore and continue past.
                 if (change.getCell(actionCol).getStringCellValue().equals("Create")) {
-                    dpf("Ignoring action \"%s\" on item \"%s\" (attempting create on existing ID in row: %d)\n",
+                    dpf("Ignoring action \"%s\" on item \"%s\" (attempting create on existing ID in %s row: %d)\n",
                             change.getCell(actionCol).getStringCellValue(), item.getCell(titleCol).getStringCellValue(),
-                            item.getRowNum());
+                            iSht.getSheetName(), item.getRowNum());
                     continue; // Break out and try next change
                 }
 
@@ -820,7 +824,7 @@ public class GroundHog {
     private String doAction(Row change, Row item) {
         // We need to find the ID of the board that this is targetting for a card
         // creation
-        LeanKitAccess lka = new LeanKitAccess(config, debugPrint);
+        LeanKitAccess lka = new LeanKitAccess(config, debugPrint, cm);
         XSSFSheet iSht = findSheet(change.getCell(itemShtCol).getStringCellValue());
         String boardName = (item.getCell(findColumnFromSheet(iSht, "Board Name")).getStringCellValue());
         Board brd = lka.fetchBoard(boardName);

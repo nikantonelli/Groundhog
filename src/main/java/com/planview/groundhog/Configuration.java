@@ -9,7 +9,6 @@ public class Configuration {
     public String password;
     public String apikey;
     public Double cyclelength;  //Excel numeric fields are doubles
-
     public String hash() {
         return Base64.getEncoder().encodeToString(
             (url+username+password+apikey+cyclelength.toString()).getBytes()

@@ -22,6 +22,9 @@ The program will attempt to prompt you on how to build the right info in the spr
 it can't work it out, then you will need to refer to the example one in this repo. The logs are 
 sent out using Sytem.out from Java - wherever that might go in your system.....
 
+I have not implemented paging so you are limited to 200 cards in a complete cycle on a board -
+that is all types of cards.
+
 ## Command Line Options
 
 -f \<file\>     
