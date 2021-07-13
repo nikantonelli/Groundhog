@@ -77,7 +77,7 @@ public class LeanKitAccess {
         // Convert to a type to return to caller.
         if (bd != null) {
             if (jresp.has("error") || jresp.has("statusCode")) {
-                dpf("ERROR: \"%s\" gave response: \"%s\"", request.getRequestLine(), jresp.toString());
+                dpf("ERROR: \"%s\" gave response: \"%s\"\n", request.getRequestLine(), jresp.toString());
                 System.exit(1);
             } else if (jresp.has("pageMeta")) {
                 JSONObject pageMeta = new JSONObject(jresp.get("pageMeta").toString());
@@ -162,7 +162,7 @@ public class LeanKitAccess {
                         break;
                     }
                     default: {
-                        dpf("oops! don't recognise requested item type");
+                        dpf("oops! don't recognise requested item type\n");
                         System.exit(1);
                     }
                 }
@@ -223,14 +223,14 @@ public class LeanKitAccess {
                     break;
                 }
                 case 429: { // Flow control
-                    LocalDateTime retryAfter = LocalDateTime.parse(httpResponse.getHeaders("retry-after")[0].getValue());
-                    LocalDateTime serverTime = LocalDateTime.parse(httpResponse.getHeaders("date")[0].getValue());
-                    Long timeDiff =  ChronoUnit.MILLIS.between(retryAfter, serverTime);
+                    LocalDateTime retryAfter = LocalDateTime.parse(httpResponse.getHeaders("retry-after")[0].getValue(), DateTimeFormatter.RFC_1123_DATE_TIME);
+                    LocalDateTime serverTime = LocalDateTime.parse(httpResponse.getHeaders("date")[0].getValue(), DateTimeFormatter.RFC_1123_DATE_TIME);
+                    Long timeDiff =  ChronoUnit.MILLIS.between(serverTime,retryAfter);
                     dpf("Received 429 status. waiting %.2f seconds\n", ((1.0 * timeDiff) / 1000.0));
                     try {
                         Thread.sleep(timeDiff);
                     } catch (InterruptedException e) {
-                        dpf("Error(L2) %s", e.getMessage());
+                        dpf("Error(L2) %s\n", e.getMessage());
                     }
                     result = processRequest();
                     break;
@@ -249,7 +249,7 @@ public class LeanKitAccess {
                     try {
                         Thread.sleep(5000);
                     } catch (InterruptedException e) {
-                        dpf("Error(L1) %s", e.getMessage());
+                        dpf("Error(L1) %s\n", e.getMessage());
                     }
                     result = processRequest();
                     break;
@@ -260,7 +260,7 @@ public class LeanKitAccess {
                 }
             }
         } catch (IOException e) {
-            dpf("Error(L3) %s", e.getMessage());
+            dpf("Error(L3) %s\n", e.getMessage());
             System.exit(1);
         }
         return result;
