@@ -8,8 +8,11 @@ import java.net.URISyntaxException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.time.Period;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.Iterator;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -208,6 +211,7 @@ public class LeanKitAccess {
                 request.addHeader("Authorization", "Basic " + Base64.getEncoder().encode(creds.getBytes()));
             }
             httpResponse = client.execute(request);
+            System.out.println(httpResponse.toString());
             switch (httpResponse.getStatusLine().getStatusCode()) {
                 case 200: // Card updated
                 case 201: // Card created
@@ -220,10 +224,12 @@ public class LeanKitAccess {
                     break;
                 }
                 case 429: { // Flow control
-                    Integer retryAfter = Integer.parseInt(httpResponse.getHeaders("retry-after")[0].getValue());
-                    dpf("Received 429 status. waiting %.2f seconds\n", ((1.0 * retryAfter) / 1000.0));
+                    LocalDateTime retryAfter = LocalDateTime.parse(httpResponse.getHeaders("retry-after")[0].getValue());
+                    LocalDateTime serverTime = LocalDateTime.parse(httpResponse.getHeaders("Date")[0].getValue());
+                    Long timeDiff =  ChronoUnit.MILLIS.between(retryAfter, serverTime);
+                    dpf("Received 429 status. waiting %.2f seconds\n", ((1.0 * timeDiff) / 1000.0));
                     try {
-                        Thread.sleep(retryAfter);
+                        Thread.sleep(timeDiff);
                     } catch (InterruptedException e) {
                         dpf("Error(L2) %s", e.getMessage());
                     }
@@ -238,8 +244,9 @@ public class LeanKitAccess {
                     dpf("Item not found: %s\n", httpResponse.toString());
                     return null;
                 }
+                case 500:   //Server fault
                 case 503: { // Service unavailable
-                    dpf("Received 503 status. retrying in 5 seconds\n");
+                    dpf("Received %d status. retrying in 5 seconds\n", httpResponse.getStatusLine().getStatusCode());
                     try {
                         Thread.sleep(5000);
                     } catch (InterruptedException e) {
