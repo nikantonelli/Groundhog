@@ -67,8 +67,10 @@ move all cards to this lane at end of cycle. This also clears out the ID field i
 
 -x \<level\>
 
-Print out some debug info that helps in setting things up. Level 0 is catastrophic errors only,
-level 1 adds some warnings about your data being wrong, level 2 adds more debug statements
+Print out some debug info that helps in setting things up. Level 0 is general message, level 1 is 
+catastrophic errors only, level 2 adds some warnings about your data being wrong, level 3 adds more 
+debug statements. Level 4 will print out the before/after messages of each network request as well
+- quite verbose.
 
 ## Example command line
 java -jar target\Groundhog-2.0-spring-boot.jar -f "Scrum Teams.xlsx" -c -s a.txt
