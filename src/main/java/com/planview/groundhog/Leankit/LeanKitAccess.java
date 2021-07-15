@@ -233,9 +233,9 @@ public class LeanKitAccess {
         // Deal with delays, retries and timeouts
         HttpClientBuilder cbldr =HttpClients.custom().setConnectionManager(cm);
         RequestConfig.Builder configBuilder = RequestConfig.custom();
-        configBuilder.setSocketTimeout(10000);
-        configBuilder.setConnectTimeout(10000);
-        configBuilder.setConnectionRequestTimeout(10000);
+        configBuilder.setSocketTimeout(40000);  //Set all timeouts to 40sec.
+        configBuilder.setConnectTimeout(40000);
+        configBuilder.setConnectionRequestTimeout(40000);
         cbldr.setDefaultRequestConfig(configBuilder.build());
         CloseableHttpClient client = cbldr.build();
         HttpResponse httpResponse = null;
