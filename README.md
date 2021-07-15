@@ -89,21 +89,19 @@ have to supply both. The next valid row in the sheet will be used as the require
 
 ## Changes
 
-The program looks on the Changes sheet for the column titles: 
-  
-'Day Delta', 'Item Sheet', 'Item Row', 'Action', 'Value1' and 'Value2' in Row 1.
-  
-The Day Delta is the day from the start of the program that you want the change to occur, the 
-'Item Sheet' and 'Item Row' identify the artifact that needs updating. The Value1 column is used 
-for plain fields, but those updates that require more info make use of Value1 and Value2. Hopefully, 
-there are some explanations in the example spreadsheet.
-  
-Changes are made sequentially. This program is not built for speed! The reason for sequential is 
-that after a 'Create', the Id must be written back into the spreadsheet so that a subsequent change
-can use it as a Parent. This will not work with parallel creations.
+The program looks on the Changes sheet for the column titles:
 
-Changes are written back after every one to protect against network or program failures. In this way, 
-re-running the program should pick up from where it left off without re-creating a whole bunch of stuff.
+'Group', 'Item Sheet', 'Item Row', 'Action', 'Value' in Row 1.
+
+The Group identifier is used to select row of changes. The 'Item Sheet' and 'Item Row' identify the artifact that needs updating.
+
+NOTE: 'Create' entries only allow for fields that require a simple data entry. Those fields that need two values to be entered (e.g. externalLink), currently, need to be separated with a comma ",". The externalLink field therefore must not have any comma characters in its label. The Lane field may require a overrideWipComment. If so, add this to the end of the Lane, once again, separated by a comma ",". See the example spreadsheet.
+
+'Value' can also be used if you want to add subsequent 'Modify' rows to the Changes sheet. For example, you might want to create a set of items and then at a later date add some updates to the same items. As the IDs are already stored, you can stream a set of updates directly into the items
+
+Changes are made sequentially. This program is not built for speed! The reason for sequential is that after a 'Create', the Id must be written back into the spreadsheet so that a subsequent change can use it as a Parent. This will not work with parallel creations.
+
+Any updates are written back after every one to protect against network or program failures. In this way, re-running the program should pick up from where it left off without re-creating a whole bunch of stuff.
 
 ## Artifact Info
 
