@@ -2,71 +2,113 @@ package com.planview.importer.Leankit;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.net.URI;
 import java.net.URISyntaxException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.Base64;
+import java.util.Iterator;
+import java.util.concurrent.TimeUnit;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.planview.importer.Configuration;
+import com.planview.importer.Debug;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
-import org.apache.http.client.HttpClient;
+import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPatch;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpRequestBase;
-import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.client.utils.URIBuilder;
-import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.entity.mime.HttpMultipartMode;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.entity.mime.content.FileBody;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
+import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.util.EntityUtils;
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 public class LeanKitAccess {
 
+    
     Configuration config = null;
-    HttpUriRequest request = null;
+    String reqType = null;
+    String reqUrl = null;
+    HttpEntity reqEnt = null;
+    ArrayList<BasicNameValuePair> reqHdrs = new ArrayList<>();
+    ArrayList<BasicNameValuePair> reqParams = new ArrayList<>();
     Board[] boards = null;
+    PoolingHttpClientConnectionManager cm = null;
+    Integer debugPrint = 0;
 
-    Boolean debugPrint = false;
-
-    public LeanKitAccess(Configuration cfg, Boolean dbp) {
-        config = cfg;
+    public LeanKitAccess(Configuration configp, Integer dbp, PoolingHttpClientConnectionManager cmp) {
+        config = configp;
+        cm = cmp;
         // Check URL has a trailing '/'
-        if (!config.url.endsWith("/")) {
-            config.url += "/";
+        if (config.url.endsWith("/")) {
+            config.url = config.url.substring(0, config.url.length()-1);
         }
+        //We need to set to https later on
+        if (config.url.startsWith("https://")){
+            config.url = config.url.substring(8);
+        } else if (config.url.startsWith("http://")){
+            dpf(Debug.WARN, "http access to leankit not supported. Switching to https");
+            config.url = config.url.substring(7);
+        }
+
         debugPrint = dbp;
     }
 
-    private void dpf(String fmt, Object... parms) {
-        if (debugPrint) {
-            System.out.printf(fmt, parms);
+    private void dpf(Integer level, String fmt, Object... parms) {
+        String lp = null;
+        switch (level) {
+            case 1: {
+                lp = "ERROR: ";
+                break;
+            }
+            case 3: {
+                lp = "DEBUG: ";
+                break;
+            }
+            case 2: {
+                lp = "WARN: ";
+                break;
+            }
+            default: {
+                lp = "INFO: ";
+                break;
+            }
+        }
+        if (level <= debugPrint) {
+            System.out.printf(lp+fmt, parms);
         }
     }
 
     public <T> ArrayList<T> read(Class<T> expectedResponseType) {
-
+        reqHdrs.clear();
+        reqHdrs.add(new BasicNameValuePair("Accept", "application/json"));
+        reqHdrs.add(new BasicNameValuePair("Content-type", "application/json"));
         String bd = processRequest();
+        if (bd == null) {
+            return null;
+        }
         JSONObject jresp = new JSONObject(bd);
         // Convert to a type to return to caller.
         if (bd != null) {
             if (jresp.has("error") || jresp.has("statusCode")) {
-                dpf("ERROR: \"%s\" gave response: \"%s\"", request.getRequestLine(), jresp.toString());
+                dpf(Debug.ERROR, "\"%s\" gave response: \"%s\"\n", reqUrl, jresp.toString());
                 System.exit(1);
             } else if (jresp.has("pageMeta")) {
                 JSONObject pageMeta = new JSONObject(jresp.get("pageMeta").toString());
@@ -91,14 +133,21 @@ public class LeanKitAccess {
                         fieldName = "comments";
                         break;
                     default:
-                        dpf("Unsupported item type returned from server API\n");
+                        dpf(Debug.ERROR, "Unsupported item type returned from server API: %s\n", bd);
+                        return null;
+
                 }
                 if (fieldName != null) {
                     // Got something to return
                     ObjectMapper om = new ObjectMapper();
                     om.configure(DeserializationFeature.USE_JAVA_ARRAY_FOR_JSON_ARRAY, true);
                     JSONArray p = (JSONArray) jresp.get(fieldName);
-                    for (int i = 0; i < totalReturned; i++) {
+                    // Length here may be limited to 200 by the API paging.
+                    if (totalReturned != p.length()) {
+                        dpf(Debug.WARN, "Paging required for \"%s\" call. Processing %d when %d available\n", reqUrl,
+                                p.length(), totalReturned);
+                    }
+                    for (int i = 0; i < p.length(); i++) {
                         try {
                             items.add(om.readValue(p.get(i).toString(), expectedResponseType));
                         } catch (JsonProcessingException | JSONException e) {
@@ -144,7 +193,7 @@ public class LeanKitAccess {
                         break;
                     }
                     default: {
-                        dpf("%s", "oops! don't recognise requested item type");
+                        dpf(Debug.ERROR, "oops! don't recognise requested item type\n");
                         System.exit(1);
                     }
                 }
@@ -163,6 +212,10 @@ public class LeanKitAccess {
      *         Create something and return just the id to it.
      */
     public <T> T execute(Class<T> expectedResponseType) {
+        reqHdrs.clear();
+        reqHdrs.add(new BasicNameValuePair("Accept", "application/json"));
+        reqHdrs.add(new BasicNameValuePair("Content-type", "application/json"));
+
         String result = processRequest();
         if (result != null) {
             ObjectMapper om = new ObjectMapper();
@@ -178,20 +231,59 @@ public class LeanKitAccess {
     private String processRequest() {
 
         // Deal with delays, retries and timeouts
-        HttpClient client = HttpClients.createDefault();
+        HttpClientBuilder cbldr =HttpClients.custom().setConnectionManager(cm);
+        RequestConfig.Builder configBuilder = RequestConfig.custom();
+        configBuilder.setSocketTimeout(40000);  //Set all timeouts to 40sec.
+        configBuilder.setConnectTimeout(40000);
+        configBuilder.setConnectionRequestTimeout(40000);
+        cbldr.setDefaultRequestConfig(configBuilder.build());
+        CloseableHttpClient client = cbldr.build();
         HttpResponse httpResponse = null;
         String result = null;
-        request.setHeader("Accept", "application/json");
-        request.setHeader("Content-type", "application/json");
         try {
             // Add the user credentials to the request
             if (config.apikey != null) {
-                request.addHeader("Authorization", "Bearer " + config.apikey);
+                reqHdrs.add(new BasicNameValuePair("Authorization", "Bearer " + config.apikey));
             } else {
                 String creds = config.username + ":" + config.password;
-                request.addHeader("Authorization", "Basic " + Base64.getEncoder().encode(creds.getBytes()));
+                reqHdrs.add(new BasicNameValuePair("Authorization",
+                        "Basic " + Base64.getEncoder().encode(creds.getBytes())));
             }
+            HttpRequestBase request = null;
+            switch (reqType) {
+                case "POST": {
+                    request = new HttpPost(reqUrl);
+                    ((HttpPost) request).setEntity(reqEnt);
+                    break;
+                }
+                case "DELETE": {
+                    request = new HttpDelete(reqUrl);
+                    break;
+                }
+                case "PATCH": {
+                    request = new HttpPatch(reqUrl);
+                    ((HttpPatch) request).setEntity(reqEnt);
+                    break;
+                }
+                default: {
+                    request = new HttpGet(reqUrl);
+                    break;
+                }
+            }
+
+            for (int i = 0; i < reqHdrs.size(); i++) {
+                request.addHeader(reqHdrs.get(i).getName(), reqHdrs.get(i).getValue());
+            }
+            URIBuilder bldr = new URIBuilder();
+            bldr.setHost(config.url).setPath(reqUrl).setScheme("https");
+            for (int i = 0; i < reqParams.size(); i++) {
+                bldr.setParameter(reqParams.get(i).getName(), reqParams.get(i).getValue());
+            }
+            request.setURI(bldr.build());
+            dpf(Debug.VERBOSE, "%s\n", request.toString());
             httpResponse = client.execute(request);
+            dpf(Debug.VERBOSE, "%s\n", httpResponse.toString());
+
             switch (httpResponse.getStatusLine().getStatusCode()) {
                 case 200: // Card updated
                 case 201: // Card created
@@ -201,77 +293,97 @@ public class LeanKitAccess {
                 }
                 case 204: // No response expected
                 {
+                    EntityUtils.consumeQuietly(httpResponse.getEntity());
+                    break;
+                }
+                case 400: {
+                    dpf(Debug.ERROR, "Bad request: %s\n", request.toString());
                     break;
                 }
                 case 429: { // Flow control
-                    Integer retryAfter = Integer.parseInt(httpResponse.getHeaders("retry-after")[0].getValue());
-                    dpf("Received 429 status. waiting %.2f seconds\n", ((1.0 * retryAfter) / 1000.0));
+                    LocalDateTime retryAfter = LocalDateTime.parse(httpResponse.getHeaders("retry-after")[0].getValue(),
+                            DateTimeFormatter.RFC_1123_DATE_TIME);
+                    LocalDateTime serverTime = LocalDateTime.parse(httpResponse.getHeaders("date")[0].getValue(),
+                            DateTimeFormatter.RFC_1123_DATE_TIME);
+                    Long timeDiff = ChronoUnit.MILLIS.between(serverTime, retryAfter);
+                    dpf(Debug.INFO, "Received 429 status. waiting %.2f seconds\n", ((1.0 * timeDiff) / 1000.0));
+                    EntityUtils.consumeQuietly(httpResponse.getEntity());
                     try {
-                        Thread.sleep(retryAfter);
+                        TimeUnit.MILLISECONDS.sleep(timeDiff);
                     } catch (InterruptedException e) {
-
-                        result = processRequest();
-                        break;
+                        dpf(Debug.ERROR, "(L2) %s\n", e.getMessage());
                     }
+                    result = processRequest();
+                    break;
                 }
                 case 422: { // Unprocessable Parameter
-                    dpf("Parameter Error in request: %s\n", request.toString());
+                    dpf(Debug.WARN, "Parameter Error in request: %s (%s)\n", request.toString(), httpResponse.toString());
                     return null;
                 }
                 case 404: { // Item not found
-                    dpf("Item not found: %s %s\n", httpResponse.getStatusLine().getStatusCode(),
-                            httpResponse.getStatusLine().getReasonPhrase());
+                    dpf(Debug.WARN, "Item not found: %s\n", httpResponse.toString());
                     return null;
                 }
+                case 500: // Server fault
                 case 503: { // Service unavailable
-                    dpf("Received 503 status. retrying in 5 seconds\n");
+                    dpf(Debug.ERROR, "Received %d status. retrying in 5 seconds\n", httpResponse.getStatusLine().getStatusCode());
                     try {
                         Thread.sleep(5000);
                     } catch (InterruptedException e) {
-                        break;
+                        dpf(Debug.ERROR, "(L1) %s\n", e.getMessage());
                     }
+                    result = processRequest();
+                    break;
                 }
                 default: {
-                    dpf("Network fault: %s %s\n", httpResponse.getStatusLine().getStatusCode(),
-                            httpResponse.getStatusLine().getReasonPhrase());
+                    dpf(Debug.ERROR, "Network fault: %s\n", httpResponse.toString());
                     return null;
                 }
             }
         } catch (IOException e) {
-            dpf("%s", e.getMessage());
+            dpf(Debug.ERROR, "(L3) %s\n", e.getMessage());
             System.exit(1);
+        } catch (URISyntaxException e1) {
+            // Should never happen, but to keep the compiler happy.....
+            e1.printStackTrace();
         }
         return result;
     }
 
     public ArrayList<CardType> fetchCardTypes(String boardId) {
-        request = new HttpGet(config.url + "io/board/" + boardId + "/cardType");
+        reqType = "GET";
+        reqUrl = "io/board/" + boardId + "/cardType";
+        reqParams.clear();
+        reqHdrs.clear();
         ArrayList<CardType> brd = read(CardType.class);
-        if (brd.size() > 0) {
-            return brd;
+        if (brd != null) {
+            if (brd.size() > 0) {
+                return brd;
+            }
         }
         return null;
     }
 
     public Lane[] fetchLanes(String boardId) {
-        request = new HttpGet(config.url + "io/board/" + boardId + "/");
+        reqType = "GET";
+        reqUrl = "io/board/" + boardId + "/";
+        reqParams.clear();
+        reqHdrs.clear();
         ArrayList<Board> brd = read(Board.class);
-        if (brd.size() > 0) {
-            return brd.get(0).lanes;
+        if (brd != null) {
+            if (brd.size() > 0) {
+                return brd.get(0).lanes;
+            }
         }
         return null;
     }
 
-    public ArrayList<Board> fetchBoardsFromName(String name) {
-        request = new HttpGet(config.url + "io/board/");
-        URI uriA = null;
-        try {
-            uriA = new URIBuilder(request.getURI()).setParameter("search", name).build();
-            ((HttpRequestBase) request).setURI(uriA);
-        } catch (URISyntaxException e) {
-            dpf("%s", e.getMessage());
-            System.exit(1);
-        }
+    private ArrayList<Board> fetchBoardsFromName(String name) {
+        reqParams.clear();
+        reqHdrs.clear();
+        reqType = "GET";
+        reqUrl = "io/board";
+        reqParams.add(new BasicNameValuePair("search",name));
 
         // Once you get the boards, you could cache them. There may be loads, but
         // shouldn't max
@@ -281,23 +393,37 @@ public class LeanKitAccess {
 
     public void deleteCards(ArrayList<Card> cards) {
         for (int i = 0; i < cards.size(); i++) {
-            dpf("Deleting card %s\n", cards.get(i).id);
-            request = new HttpDelete(config.url + "io/card/" + cards.get(i).id);
+            dpf(Debug.INFO, "Deleting card %s\n", cards.get(i).id);
+
+            reqType = "DELETE";
+            reqHdrs.clear();
+            reqParams.clear();
+            reqUrl = "io/card/" + cards.get(i).id;
             processRequest();
         }
     }
 
-    public ArrayList<Card> fetchCardsFromBoard(String id) {
-        request = new HttpGet(config.url + "io/card");
-        URI uriA = null;
-        try {
-            uriA = new URIBuilder(request.getURI()).setParameter("board", id).build();
-            ((HttpRequestBase) request).setURI(uriA);
-        } catch (URISyntaxException e) {
-            dpf("%s", e.getMessage());
-            System.exit(1);
-        }
+    public ArrayList<Comment> fetchCommentsForCard(Card cd) {
+        reqParams.clear();
+        reqHdrs.clear();
+        reqType = "GET";
+        reqUrl = "io/card/" + cd.id + "/comment";
+        return read(Comment.class);
+    }
 
+    public ArrayList<Card> fetchCardIDsFromBoard(String id, Integer rewind) {
+        LocalDateTime sinceDate = LocalDateTime.now();
+        sinceDate.minus(rewind, ChronoUnit.DAYS);
+        reqParams.clear();
+        reqHdrs.clear();
+        if (rewind >= 0) {
+            reqType = "GET";
+            reqUrl = "io/card?board=" + id + "&deleted=0&only=id&since="
+                    + sinceDate.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) + "T00:00:00Z";
+        } else {
+            reqType = "GET";
+            reqUrl = "io/card?board=" + id + "&deleted=0&only=id";
+        }
         // Once you get the boards, you could cache them. There may be loads, but
         // shouldn't max
         // out memory.
@@ -305,15 +431,12 @@ public class LeanKitAccess {
     }
 
     public Board fetchBoardFromId(String id) {
-        request = new HttpGet(config.url + "io/board/" + id);
-        URI uriB = null;
-        try {
-            uriB = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "true").build();
-            ((HttpRequestBase) request).setURI(uriB);
-        } catch (URISyntaxException e) {
-            dpf("%s", e.getMessage());
-            System.exit(1);
-        }
+        reqType ="GET";
+        reqParams.clear();
+        reqHdrs.clear();
+        reqUrl = "io/board/" + id;
+        reqParams.add(new BasicNameValuePair("returnFullRecord","true"));
+
         ArrayList<Board> results = read(Board.class);
         if (results != null) {
             return results.get(0);
@@ -343,93 +466,95 @@ public class LeanKitAccess {
     }
 
     public String fetchUserId(String emailAddress) {
-        request = new HttpGet(config.url + "io/user/");
-        URI uri = null;
-        try {
-            uri = new URIBuilder(request.getURI()).setParameter("search", emailAddress).build();
-            ((HttpRequestBase) request).setURI(uri);
-        } catch (URISyntaxException e) {
-            dpf("%s", e.getMessage());
-            System.exit(1);
-        }
+        reqUrl = "io/user";
+        reqType = "GET";
+        reqParams.clear();
+        reqHdrs.clear();
+        reqParams.add(new BasicNameValuePair("search",emailAddress));
 
         ArrayList<User> userd = read(User.class);
-
         User user = null;
-        if (userd.size() > 0) {
-            // We found one or more with this name search. First try to find an exact match
-            Iterator<User> uItor = userd.iterator();
-            while (uItor.hasNext()) {
-                User u = uItor.next();
-                if (u.emailAddress.equals(emailAddress)) {
-                    user = u;
+
+        if (userd != null) {
+            if (userd.size() > 0) {
+                // We found one or more with this name search. First try to find an exact match
+                Iterator<User> uItor = userd.iterator();
+                while (uItor.hasNext()) {
+                    User u = uItor.next();
+                    if (u.emailAddress.equals(emailAddress)) {
+                        user = u;
+                    }
                 }
+                // Then take the first if that fails
+                if (user == null)
+                    user = userd.get(0);
+                return user.id;
             }
-            // Then take the first if that fails
-            if (user == null)
-                user = userd.get(0);
-            return user.id;
         }
         return null;
     }
 
     private String sendAttachment(String id, String filename) {
-        request = new HttpPost(config.url + "/io/card/" + id + "/attachment");
-        URI uri = null;
-        try {
-            uri = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "false").build();
-            ((HttpRequestBase) request).setURI(uri);
-        } catch (URISyntaxException e) {
-            dpf("%s", e.getMessage());
-            System.exit(1);
-        }
+        reqType = "POST";
+        reqUrl = "/io/card/" + id + "/attachment";
+        reqParams.clear();
+        reqHdrs.clear();
+
         File atchmt = new File(filename);
         FileBody fb = new FileBody(atchmt);
         MultipartEntityBuilder mpeb = MultipartEntityBuilder.create().setMode(HttpMultipartMode.BROWSER_COMPATIBLE)
                 .addTextBody("Description", "Auto-generated from Script").addPart(filename, fb);
-        HttpEntity ent = mpeb.build();
-        ((HttpPost) request).setEntity(ent);
+        reqEnt = mpeb.build();
+
         String status = processRequest();
         return status;
     }
 
     private String postComment(String id, String comment) {
-        request = new HttpPost(config.url + "/io/card/" + id + "/comment");
+        reqType = "POST";
+        reqUrl = "/io/card/" + id + "/comment";
+        reqParams.clear();
+        reqHdrs.clear();
         JSONObject ent = new JSONObject();
         ent.put("text", comment);
-        try {
-            ((HttpPost) request).setEntity(new StringEntity(ent.toString()));
-        } catch (UnsupportedEncodingException e) {
-            return null;
-        }
+        reqEnt = new StringEntity(ent.toString(), "UTF-8");
+
         Comment c = execute(Comment.class);
-        return c.id;
+        if (c != null) {
+            return c.id;
+        } else
+            return null;
     }
 
     public Card fetchCard(String id) {
-        request = new HttpGet(config.url + "/io/card/" + id);
-        URI uri = null;
-        try {
-            uri = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "true").build();
-            ((HttpRequestBase) request).setURI(uri);
-        } catch (URISyntaxException e) {
-            dpf("%s", e.getMessage());
-            System.exit(1);
-        }
+        reqType = "GET";
+        reqUrl = "/io/card/" + id;
+        reqParams.clear();
+        reqHdrs.clear();
+        reqParams.add(new BasicNameValuePair("returnFullRecord","true"));
         return execute(Card.class);
     }
 
     public User fetchUser(String id) {
-        request = new HttpGet(config.url + "/io/user/" + id);
-        URI uri = null;
-        try {
-            uri = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "true").build();
-            ((HttpRequestBase) request).setURI(uri);
-        } catch (URISyntaxException e) {
-            dpf("%s", e.getMessage());
-            System.exit(1);
-        }
+        reqType = "GET";
+        reqUrl = "/io/user/" + id;
+        reqParams.clear();
+        reqHdrs.clear();
+        reqParams.add(new BasicNameValuePair("returnFullRecord","true"));
         return execute(User.class);
+    }
+
+    private Integer findTagIndex(Card card, String name) {
+        Integer index = -1;
+        String[] names = card.tags;
+        if (names != null) {
+            for (int i = 0; i < names.length; i++) {
+                if (names[i].equals(name)) {
+                    index = i;
+                }
+            }
+        }
+        return index;
     }
 
     public Card updateCardFromId(Board brd, Card card, JSONObject updates) {
@@ -480,17 +605,22 @@ public class LeanKitAccess {
                 case "Parent": {
                     if ((values.get("value1") == null) || (values.get("value1").toString() == "")
                             || (values.get("value1").toString() == "0")) {
-                        dpf("Error trying to set parent of %s to value \"%s\"\n", card.id,
+                        dpf(Debug.ERROR, "Trying to set parent of %s to value \"%s\"\n", card.id,
                                 values.get("value1").toString());
-                        break;
+                    } else if (values.get("value1").toString().startsWith("-")) {
+                        JSONObject upd2 = new JSONObject();
+                        upd2.put("op", "remove");
+                        upd2.put("path", "/parentCardId");
+                        upd2.put("value", values.get("value1").toString().substring(1));
+                        jsa.put(upd2);
                     } else {
                         JSONObject upd2 = new JSONObject();
                         upd2.put("op", "add");
                         upd2.put("path", "/parentCardId");
                         upd2.put("value", values.get("value1").toString());
                         jsa.put(upd2);
-                        break;
                     }
+                    break;
                 }
                 case "Lane": {
                     // Need to find the lane on the board and set the card to be in it.
@@ -503,7 +633,7 @@ public class LeanKitAccess {
                         JSONObject upd2 = new JSONObject();
                         upd2.put("op", "add");
                         upd2.put("path", "/wipOverrideComment");
-                        upd2.put("value", values.get("value2").toString());
+                        upd2.put("value", values.get("value2").toString().trim());
                         jsa.put(upd2);
                     }
                     break;
@@ -511,25 +641,40 @@ public class LeanKitAccess {
                 case "tags": {
                     // Need to add or remove based on what we already have?
                     // Or does add/remove ignore duplicate calls. Trying this first.....
-
-                    JSONObject upd = new JSONObject();
-                    upd.put("op", "add");
-                    upd.put("path", "/tags/-");
-                    upd.put("value", values.get("value1").toString());
-                    jsa.put(upd);
-
+                    if (values.get("value1").toString().toString().startsWith("-")) {
+                        Integer tIndex = findTagIndex(card, values.get("value1").toString().substring(1));
+                        // If we found it, we can remove it
+                        if (tIndex >= 0) {
+                            JSONObject upd = new JSONObject();
+                            upd.put("op", "remove");
+                            upd.put("path", "/tags/" + tIndex);
+                            jsa.put(upd);
+                        }
+                    } else {
+                        JSONObject upd = new JSONObject();
+                        upd.put("op", "add");
+                        upd.put("path", "/tags/-");
+                        upd.put("value", values.get("value1").toString());
+                        jsa.put(upd);
+                    }
                     break;
                 }
                 case "assignedUsers": {
                     // Need to add or remove based on what we already have?
                     // Or does add/remove ignore duplicate calls. Trying this first.....
-
-                    JSONObject upd = new JSONObject();
-                    upd.put("op", "add");
-                    upd.put("path", "/assignedUserIds/-");
-                    upd.put("value", fetchUserId(values.get("value1").toString()));
-                    jsa.put(upd);
-
+                    if (values.get("value1").toString().startsWith("-")) {
+                        JSONObject upd = new JSONObject();
+                        upd.put("op", "remove");
+                        upd.put("path", "/assignedUserIds");
+                        upd.put("value", fetchUserId(values.get("value1").toString().substring(1)));
+                        jsa.put(upd);
+                    } else {
+                        JSONObject upd = new JSONObject();
+                        upd.put("op", "add");
+                        upd.put("path", "/assignedUserIds/-");
+                        upd.put("value", fetchUserId(values.get("value1").toString()));
+                        jsa.put(upd);
+                    }
                     break;
                 }
                 case "externalLink": {
@@ -537,12 +682,12 @@ public class LeanKitAccess {
                     JSONObject upd = new JSONObject();
                     String[] bits = values.get("value1").toString().split(",");
                     if (bits.length != 2) {
-                        dpf("Could not extract externalLink from %s (possible ',' in label?)",
+                        dpf(Debug.WARN, "Could not extract externalLink from %s (possible ',' in label?)",
                                 values.get("value1").toString());
                         break;
                     }
                     link.put("label", bits[0]);
-                    link.put("url", bits[1]);
+                    link.put("url", bits[1].trim());
                     upd.put("op", "replace");
                     upd.put("path", "/externalLink");
                     upd.put("value", link);
@@ -564,15 +709,6 @@ public class LeanKitAccess {
                             }
                         }
                     }
-                    break;
-                }
-                // Mismatch between UI and database in LK.
-                case "priority": {
-                    JSONObject upd = new JSONObject();
-                    upd.put("op", "replace");
-                    upd.put("path", "/" + key);
-                    upd.put("value", values.get("value1").toString().toLowerCase());
-                    jsa.put(upd);
                     break;
                 }
                 case "attachments": {
@@ -605,77 +741,54 @@ public class LeanKitAccess {
                     }
                     break;
                 }
+                // Mismatch between UI and database in LK.
+                case "priority": {
+                    JSONObject upd = new JSONObject();
+                    upd.put("op", "replace");
+                    upd.put("path", "/" + key);
+                    upd.put("value", values.get("value1").toString().toLowerCase());
+                    jsa.put(upd);
+                    break;
+                }
                 default: {
                     JSONObject upd = new JSONObject();
                     upd.put("op", "replace");
                     upd.put("path", "/" + key);
                     upd.put("value", values.get("value1"));
                     jsa.put(upd);
+                    break;
                 }
             }
         }
-        request = new HttpPatch(config.url + "io/card/" + card.id);
-        URI uri = null;
-        try {
-            uri = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "false").build();
-            ((HttpRequestBase) request).setURI(uri);
-        } catch (URISyntaxException e) {
-            dpf("%s", e.getMessage());
-            System.exit(1);
-        }
-        try {
-            ((HttpPatch) request).setEntity(new StringEntity(jsa.toString()));
-            return execute(Card.class);
-        } catch (UnsupportedEncodingException e) {
-            e.printStackTrace();
-            return null;
-        }
+        reqType = "PATCH";
+        reqUrl = "io/card/" + card.id;
+        reqEnt = new StringEntity(jsa.toString(), "UTF-8");
+        reqParams.clear();
+        reqHdrs.clear();
+        return execute(Card.class);
+
     }
 
     public Card createCard(String boardId, JSONObject jItem) {
-
-        request = new HttpPost(config.url + "io/card/");
+        reqType = "POST";
+        reqUrl = "io/card/";
+        reqParams.add(new BasicNameValuePair("returnFullRecord","true"));
         jItem.put("boardId", boardId);
-        URI uri = null;
-        try {
-            uri = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "true").build();
-            ((HttpRequestBase) request).setURI(uri);
-        } catch (URISyntaxException e) {
-            dpf("%s", e.getMessage());
-            System.exit(1);
-        }
 
         if (!jItem.has("title")) {
             jItem.put("title", "dummy title"); // Used when we are testing a create to get back the card structure
         }
-        try {
-            ((HttpPost) request).setEntity(new StringEntity(jItem.toString()));
-            return execute(Card.class);
-        } catch (UnsupportedEncodingException e) {
-            e.printStackTrace();
-            return null;
-        }
+        reqEnt = new StringEntity(jItem.toString(), "UTF-8");
+        return execute(Card.class);
     }
 
     public Id createCardID(String boardId) {
         JSONObject jItem = new JSONObject();
-        request = new HttpPost(config.url + "io/card/");
+        reqType = "POST";
+        reqParams.add(new BasicNameValuePair("returnFullRecord","true"));
+        reqUrl = "io/card/";
         jItem.put("boardId", boardId);
-        URI uri = null;
-        try {
-            uri = new URIBuilder(request.getURI()).setParameter("returnFullRecord", "false").build();
-            ((HttpRequestBase) request).setURI(uri);
-        } catch (URISyntaxException e) {
-            dpf("%s", e.getMessage());
-            System.exit(1);
-        }
-        try {
-            ((HttpPost) request).setEntity(new StringEntity(jItem.toString()));
-            return execute(Id.class);
-        } catch (UnsupportedEncodingException e) {
-            e.printStackTrace();
-            return null;
-        }
-
+        reqEnt = new StringEntity(jItem.toString(), "UTF-8");
+        return execute(Id.class);
     }
 }

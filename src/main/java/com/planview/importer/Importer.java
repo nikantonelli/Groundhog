@@ -30,6 +30,7 @@ import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DateUtil;
@@ -42,10 +43,11 @@ import org.json.JSONObject;
 
 public class Importer {
 
-    static Boolean debugPrint = false;
+    static PoolingHttpClientConnectionManager cm = null;
+    static Integer debugPrint = -1;
     Configuration config = new Configuration();
     String xlsxfn = "";
-    static Integer group = 0;   //Grouping
+    static Integer group = 0; // Grouping
     FileInputStream xlsxfis = null;
     XSSFWorkbook wb = null;
 
@@ -70,14 +72,17 @@ public class Importer {
 
     public static void main(String[] args) throws IOException, InterruptedException {
 
+        cm = new PoolingHttpClientConnectionManager();
+        cm.setMaxTotal(10);  //Recommendation for LK is 5, but the 429 handler should keep us in check
+        
         Importer hog = new Importer();
 
         hog.getCommandLine(args);
         hog.parseXlsx();
         hog.getConfig();
-    
+
         hog.activity(group);
-       
+
     }
 
     public static void setUpStatusFile(File statusFs) {
@@ -91,7 +96,7 @@ public class Importer {
             fos.flush();
             fos.close();
         } catch (IOException e) {
-            dpf("%s", e.getMessage());
+            dpf(Debug.ERROR, "%s", e.getMessage());
             System.exit(1);
         }
     }
@@ -101,7 +106,7 @@ public class Importer {
         Option xlsxname = new Option("f", "filename", true, "source XLSX spreadsheet");
         xlsxname.setRequired(true);
         opts.addOption(xlsxname);
-        
+
         Option groupOpt = new Option("g", "group", true, "Identifier of group to process (if present)");
         groupOpt.setRequired(false);
         opts.addOption(groupOpt);
@@ -116,7 +121,7 @@ public class Importer {
         try {
             cl = p.parse(opts, args);
         } catch (ParseException e) {
-            dpf("%s", e.getMessage());
+            dpf(Debug.ERROR, "%s", e.getMessage());
             hf.printHelp(" ", opts);
             System.exit(1);
         }
@@ -127,7 +132,12 @@ public class Importer {
             group = Integer.parseInt(cl.getOptionValue("group"));
         }
 
-        debugPrint = cl.hasOption("debug");
+        String optVal = cl.getOptionValue("debug");
+        if (optVal != null) {
+            debugPrint = Integer.parseInt(optVal);
+        } else {
+            debugPrint = 99;
+        }
 
     }
 
@@ -140,7 +150,7 @@ public class Importer {
         try {
             xlsxfis = new FileInputStream(new File(xlsxfn));
         } catch (FileNotFoundException e) {
-            dpf("%s", e.getMessage());
+            dpf(Debug.ERROR, "%s", e.getMessage());
 
             System.exit(1);
 
@@ -149,7 +159,7 @@ public class Importer {
             wb = new XSSFWorkbook(xlsxfis);
             xlsxfis.close();
         } catch (IOException e) {
-            dpf("%s", e.getMessage());
+            dpf(Debug.ERROR, "%s", e.getMessage());
             System.exit(1);
         }
 
@@ -161,7 +171,7 @@ public class Importer {
 
         Integer shtCount = wb.getNumberOfSheets();
         if ((shtCount < 3) || (configSht == null) || (changesSht == null)) {
-            dpf("%s",
+            dpf(Debug.ERROR, "%s",
                     "Did not detect correct sheets in the spreadsheet: \"Config\",\"Changes\" and one, or more, team(s)");
             System.exit(1);
         }
@@ -201,7 +211,7 @@ public class Importer {
         // Assume that the titles are the first row
         Iterator<Row> ri = configSht.iterator();
         if (!ri.hasNext()) {
-            dpf("%s", "Did not detect any header info on Config sheet (first row!)");
+            dpf(Debug.ERROR, "%s", "Did not detect any header info on Config sheet (first row!)");
             System.exit(1);
         }
         Row hdr = ri.next();
@@ -217,12 +227,12 @@ public class Importer {
         }
 
         if (fieldMap.size() != cols.size()) {
-            dpf("%s", "Did not detect correct columns on Config sheet: " + cols.toString());
+            dpf(Debug.ERROR, "%s", "Did not detect correct columns on Config sheet: " + cols.toString());
             System.exit(1);
         }
 
         if (!ri.hasNext()) {
-            dpf("%s",
+            dpf(Debug.ERROR, "%s",
                     "Did not detect any field info on Config sheet (first cell must be non-blank, e.g. url to a real host)");
             System.exit(1);
         }
@@ -261,7 +271,7 @@ public class Importer {
                         }
 
                     } catch (IllegalArgumentException | IllegalAccessException e) {
-                        dpf("%s", e.getMessage());
+                        dpf(Debug.ERROR, "%s", e.getMessage());
                         System.exit(1);
                     }
 
@@ -279,7 +289,7 @@ public class Importer {
          **/
 
         if ((config.apikey == null) && ((config.username == null) || (config.password == null))) {
-            dpf("%s", "Did not detect enough user info: apikey or username/password pair");
+            dpf(Debug.ERROR, "%s", "Did not detect enough user info: apikey or username/password pair");
             System.exit(1);
         }
 
@@ -327,9 +337,28 @@ public class Importer {
         return col;
     }
 
-    private static void dpf(String fmt, Object... parms) {
-        if (debugPrint) {
-            System.out.printf(fmt, parms);
+    private static void dpf(Integer level, String fmt, Object... parms) {
+        String lp = null;
+        switch (level) {
+            case 0: {
+                lp = "INFO: ";
+                break;
+            }
+            case 1: {
+                lp = "ERROR: ";
+                break;
+            }
+            case 2: {
+                lp = "WARN: ";
+                break;
+            }
+            case 3: {
+                lp = "DEBUG: ";
+                break;
+            }
+        }
+        if (level <= debugPrint) {
+            System.out.printf(lp + fmt, parms);
         }
     }
 
@@ -345,10 +374,9 @@ public class Importer {
         fieldCol = findColumnFromSheet(changesSht, "Field");
         value1Col = findColumnFromSheet(changesSht, "Value");
 
-
         if ((dayCol == null) || (itemShtCol == null) || (rowCol == null) || (actionCol == null) || (fieldCol == null)
                 || (value1Col == null)) {
-            dpf("Could not find all required columns in %s sheet: \"Group\", \"Item Sheet\", \"Item Row\", \"Action\", \"Field\", \"Value\"\n",
+            dpf(Debug.ERROR, "Could not find all required columns in %s sheet: \"Group\", \"Item Sheet\", \"Item Row\", \"Action\", \"Field\", \"Value\"\n",
                     changesSht.getSheetName());
             System.exit(1);
         }
@@ -365,10 +393,10 @@ public class Importer {
         }
 
         if (todaysChanges.size() == 0) {
-            dpf("No actions to take for group %d\n", day);
+            dpf(Debug.INFO, "No actions to take for group %d\n", day);
             return;
         } else {
-            dpf("%d actions to take for group %d\n", todaysChanges.size(), day);
+            dpf(Debug.INFO, "%d actions to take for group %d\n", todaysChanges.size(), day);
         }
 
         // Now scan through the changes doing the actions
@@ -380,7 +408,7 @@ public class Importer {
             // First check the validity of the info
             if ((change.getCell(itemShtCol) == null) || (change.getCell(rowCol) == null)
                     || (change.getCell(actionCol) == null)) {
-                dpf("Cannot decode change info in row \"%d\" - skipping\n", change.getRowNum());
+                dpf(Debug.WARN, "Cannot decode change info in row \"%d\" - skipping\n", change.getRowNum());
                 continue;
             }
             XSSFSheet iSht = findSheet(change.getCell(itemShtCol).getStringCellValue());
@@ -392,7 +420,7 @@ public class Importer {
             item = iSht.getRow((int) (change.getCell(rowCol).getNumericCellValue() - 1));
 
             if ((idCol == null) || (titleCol == null)) {
-                dpf("Cannot locate \"ID\" and \"title\" columns needed in sheet \"%s\" - skipping\n",
+                dpf(Debug.WARN, "Cannot locate \"ID\" and \"title\" columns needed in sheet \"%s\" - skipping\n",
                         iSht.getSheetName());
                 continue;
             }
@@ -400,7 +428,7 @@ public class Importer {
             // Check board name is present for a Create
             if ((change.getCell(actionCol).getStringCellValue().equals("Create")) && ((boardCol == null)
                     || (item.getCell(boardCol) == null) || (item.getCell(boardCol).getStringCellValue().isEmpty()))) {
-                dpf("Cannot locate \"Board Name\" column needed in sheet \"%s\"  for a Create - skipping\n",
+                dpf(Debug.WARN, "Cannot locate \"Board Name\" column needed in sheet \"%s\"  for a Create - skipping\n",
                         iSht.getSheetName());
                 continue;
             }
@@ -408,20 +436,20 @@ public class Importer {
             // Check title is present for a Create
             if ((change.getCell(actionCol).getStringCellValue().equals("Create"))
                     && ((item.getCell(titleCol) == null) || (item.getCell(titleCol).getStringCellValue().isEmpty()))) {
-                dpf("Required \"title\" column/data missing in sheet \"%s\", row: %d for a Create - skipping\n",
+                dpf(Debug.WARN, "Required \"title\" column/data missing in sheet \"%s\", row: %d for a Create - skipping\n",
                         iSht.getSheetName(), item.getRowNum());
                 continue;
             }
 
             if ((typeCol == null) || (item.getCell(typeCol) == null)) {
-                dpf("Cannot locate \"Type\" column on row:  %d  - using default for board\n", item.getRowNum());
+                dpf(Debug.WARN, "Cannot locate \"Type\" column on row:  %d  - using default for board\n", item.getRowNum());
             }
 
             // If unset, it has a null value for the Leankit ID
             if ((item.getCell(idCol) == null) || (item.getCell(idCol).getStringCellValue() == "")) {
                 // Check if this is a 'create' operation. If not, ignore and continue past.
                 if (!change.getCell(actionCol).getStringCellValue().equals("Create")) {
-                    dpf("Ignoring action \"%s\" on item \"%s\" (no ID present in row: %d)\n",
+                    dpf(Debug.WARN, "Ignoring action \"%s\" on item \"%s\" (no ID present in row: %d)\n",
                             change.getCell(actionCol).getStringCellValue(), item.getCell(titleCol).getStringCellValue(),
                             item.getRowNum());
                     continue; // Break out and try next change
@@ -429,7 +457,7 @@ public class Importer {
             } else {
                 // Check if this is a 'create' operation. If it is, ignore and continue past.
                 if (change.getCell(actionCol).getStringCellValue().equals("Create")) {
-                    dpf("Ignoring action \"%s\" on item \"%s\" (attempting create on existing ID in row: %d)\n",
+                    dpf(Debug.WARN, "Ignoring action \"%s\" on item \"%s\" (attempting create on existing ID in row: %d)\n",
                             change.getCell(actionCol).getStringCellValue(), item.getCell(titleCol).getStringCellValue(),
                             item.getRowNum());
                     continue; // Break out and try next change
@@ -446,19 +474,19 @@ public class Importer {
                 item.getCell(idCol).setCellValue(id);
                 XSSFFormulaEvaluator.evaluateAllFormulaCells(wb);
                 writeFile();
-                dpf("Create card \"%s\" on board \"%s\"\n", item.getCell(titleCol).getStringCellValue(),
+                dpf(Debug.INFO, "Create card \"%s\" on board \"%s\"\n", item.getCell(titleCol).getStringCellValue(),
                         item.getCell(boardCol).getStringCellValue());
             } else {
                 id = doAction(change, item);
-                dpf(".");
+                dpf(Debug.INFO, "Modified card \"%s\" on board \"%s\"\n", item.getCell(titleCol).getStringCellValue(),
+                item.getCell(boardCol).getStringCellValue());
             }
 
             if (id == null) {
 
-                dpf("%s", "Got null back from doAction(). Seek help!\n");
+                dpf(Debug.ERROR, "%s", "Got null back from doAction(). Seek help!\n");
             }
         }
-        dpf("\n"); // Finish up the dotting.....
     }
 
     private void writeFile() {
@@ -475,14 +503,14 @@ public class Importer {
                         oStr = null;
                         loopCnt = 0;
                     } catch (IOException e) {
-                        dpf("Error %s while closing file %s\n", e, xlsxfn);
+                        dpf(Debug.ERROR, "Error %s while closing file %s\n", e, xlsxfn);
                     }
                 } catch (IOException e) {
-                    dpf("Error %s while writing file %s\n", e, xlsxfn);
+                    dpf(Debug.ERROR, "Error %s while writing file %s\n", e, xlsxfn);
                     oStr.close(); // If this fails, just give up!
                 }
             } catch (IOException e) {
-                dpf("Error %s while opening/closing file %s\n", e, xlsxfn);
+                dpf(Debug.ERROR, "Error %s while opening/closing file %s\n", e, xlsxfn);
             }
             if (loopCnt == 0) {
                 break;
@@ -493,7 +521,7 @@ public class Importer {
             then.add(Calendar.SECOND, 5);
             Long timeDiff = then.getTimeInMillis() - now.getTimeInMillis();
             if (donePrint) {
-                dpf("File \"%s\" in use. Please close to let this program continue\n", xlsxfn);
+                dpf(Debug.WARN, "File \"%s\" in use. Please close to let this program continue\n", xlsxfn);
                 donePrint = false;
             }
             try {
@@ -508,13 +536,13 @@ public class Importer {
     private String doAction(Row change, Row item) {
         // We need to find the ID of the board that this is targetting for a card
         // creation
-        LeanKitAccess lka = new LeanKitAccess(config, debugPrint);
+        LeanKitAccess lka = new LeanKitAccess(config, debugPrint, cm);
         XSSFSheet iSht = findSheet(change.getCell(itemShtCol).getStringCellValue());
         String boardName = (item.getCell(findColumnFromSheet(iSht, "Board Name")).getStringCellValue());
         Board brd = lka.fetchBoard(boardName);
 
         if (brd == null) {
-            dpf("Cannot find board with name %s for item on sheet %s, row %d\n", boardName,
+            dpf(Debug.ERROR, "Cannot find board with name %s for item on sheet %s, row %d\n", boardName,
                     change.getCell(itemShtCol).getStringCellValue(),
                     (int) change.getCell(rowCol).getNumericCellValue());
             return null;
@@ -569,7 +597,7 @@ public class Importer {
             Id card = createCard(lka, brd, flds); // Change from human readable to API fields on
                                                   // the way
             if (card == null) {
-                dpf("Could not create card on board %s with details: %s", boardNumber, fieldLst.toString());
+                dpf(Debug.ERROR, "Could not create card on board %s with details: %s", boardNumber, fieldLst.toString());
                 System.exit(1);
             }
             return card.id;
@@ -578,7 +606,8 @@ public class Importer {
             // Fetch the ID from the item and then fetch that card
             Card card = lka.fetchCard(item.getCell(idCol).getStringCellValue());
             if (card == null) {
-                dpf("Could not locate card \"%s\" on board \"%s\"\n", item.getCell(idCol).getStringCellValue(), boardNumber);
+                dpf(Debug.ERROR, "Could not locate card \"%s\" on board \"%s\"\n", item.getCell(idCol).getStringCellValue(),
+                        boardNumber);
                 return null;
             }
             JSONObject fld = new JSONObject();
@@ -589,7 +618,7 @@ public class Importer {
             fld.put(change.getCell(fieldCol).getStringCellValue(), vals);
             Id id = updateCard(lka, brd, card, fld);
             if (id == null) {
-                dpf("Could not modify card on board %s with details:\"%s\"\n", boardNumber, fld.toString());
+                dpf(Debug.ERROR, "Could not modify card on board %s with details:\"%s\"\n", boardNumber, fld.toString());
                 System.exit(1);
             }
             return id.id;
@@ -652,6 +681,7 @@ public class Importer {
         }
         return ln;
     }
+
     private ArrayList<Lane> findLanesFromParentId(Lane[] lanes, String id) {
         ArrayList<Lane> ln = new ArrayList<>();
         for (int i = 0; i < lanes.length; i++) {
@@ -678,7 +708,7 @@ public class Importer {
         ArrayList<Lane> searchLanes = new ArrayList<>(Arrays.asList(brd.lanes));
         int j = 0;
         ArrayList<Lane> lanesToCheck = findLanesFromName(searchLanes, lanes[j]);
-        do {   
+        do {
             if (++j >= lanes.length) {
                 searchLanes = lanesToCheck;
                 break;
@@ -691,22 +721,22 @@ public class Importer {
                 Iterator<Lane> clIter = childLanes.iterator();
                 while (clIter.hasNext()) {
                     Lane cl = clIter.next();
-                    if (cl.name.equals(lanes[j])){
+                    if (cl.name.equals(lanes[j])) {
                         foundLanes.add(cl);
                     }
                 }
-                if ( foundLanes.size() > 0){
+                if (foundLanes.size() > 0) {
                     lanesToCheck = foundLanes;
                 }
             }
 
-        } while(true);
+        } while (true);
 
         if (searchLanes.size() == 0) {
-            dpf("Cannot find lane \"%s\"on board \"%s\"\n", name, brd.title);
+            dpf(Debug.WARN, "Cannot find lane \"%s\"on board \"%s\"\n", name, brd.title);
         }
         if (searchLanes.size() > 1) {
-            dpf("Ambiguous lane name \"%s\"on board \"%s\"\n", name, brd.title);
+            dpf(Debug.WARN, "Ambiguous lane name \"%s\"on board \"%s\"\n", name, brd.title);
         }
 
         return searchLanes.get(0);
@@ -757,20 +787,20 @@ public class Importer {
                     finalUpdates.put(fldName, fieldLst.get(fldName));
                     break;
                 case "lane": {
-    
-                    Lane foundLane = null; 
+
+                    Lane foundLane = null;
                     int idx = fldValues.get("value1").toString().indexOf(",");
                     String woc = null;
-                    if ( idx < 0) {
+                    if (idx < 0) {
                         foundLane = findLaneFromString(brd, fldValues.get("value1").toString());
-                    } else if (idx >0) {
+                    } else if (idx > 0) {
                         foundLane = findLaneFromString(brd, fldValues.get("value1").toString().substring(0, idx));
-                        woc = fldValues.get("value1").toString().substring(idx+1);
+                        woc = fldValues.get("value1").toString().substring(idx + 1);
                     } else {
                         return null;
                     }
                     if (foundLane != null) {
-                        if (foundLane.columns != 1) {   //Cannot move to a parent lane
+                        if (foundLane.columns != 1) { // Cannot move to a parent lane
                             return null;
                         }
                         JSONObject result = new JSONObject();
@@ -809,7 +839,7 @@ public class Importer {
                             result.put("value2", ((JSONObject) fieldLst.get(fldName)).get("value1"));
                             finalUpdates.put("CustomField", result);
                         } else {
-                            dpf("Incorrect field name \"%s\" provided for update on card %s\n", fldName, card.id);
+                            dpf(Debug.WARN, "Incorrect field name \"%s\" provided for update on card %s\n", fldName, card.id);
                             return null;
                         }
                     }
@@ -819,11 +849,10 @@ public class Importer {
         }
         Id id = new Id();
         Card upc = lka.updateCardFromId(brd, card, finalUpdates);
-        if (upc != null){
+        if (upc != null) {
             id.id = upc.id;
             return id;
-        }
-        else {
+        } else {
             return null;
         }
     }
