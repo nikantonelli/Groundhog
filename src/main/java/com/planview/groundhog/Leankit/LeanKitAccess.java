@@ -284,16 +284,17 @@ public class LeanKitAccess {
             httpResponse = client.execute(request);
             dpf(Debug.VERBOSE, "%s\n", httpResponse.toString());
 
+            Boolean entityTaken = false;
             switch (httpResponse.getStatusLine().getStatusCode()) {
                 case 200: // Card updated
                 case 201: // Card created
                 {
                     result = EntityUtils.toString(httpResponse.getEntity());
+                    entityTaken = true;
                     break;
                 }
                 case 204: // No response expected
                 {
-                    EntityUtils.consumeQuietly(httpResponse.getEntity());
                     break;
                 }
                 case 400: {
@@ -328,6 +329,7 @@ public class LeanKitAccess {
                 case 503: { // Service unavailable
                     dpf(Debug.ERROR, "Received %d status. retrying in 5 seconds\n", httpResponse.getStatusLine().getStatusCode());
                     try {
+                        EntityUtils.consumeQuietly(httpResponse.getEntity());
                         Thread.sleep(5000);
                     } catch (InterruptedException e) {
                         dpf(Debug.ERROR, "(L1) %s\n", e.getMessage());
@@ -339,6 +341,9 @@ public class LeanKitAccess {
                     dpf(Debug.ERROR, "Network fault: %s\n", httpResponse.toString());
                     return null;
                 }
+            }
+            if (!entityTaken) {
+                EntityUtils.consumeQuietly(httpResponse.getEntity());   //Tidy up because the java library has a 'feature'
             }
         } catch (IOException e) {
             dpf(Debug.ERROR, "(L3) %s\n", e.getMessage());
