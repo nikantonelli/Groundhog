@@ -19,6 +19,7 @@ import com.planview.groundhog.Debug;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
+import org.apache.http.NameValuePair;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
@@ -36,19 +37,19 @@ import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.util.EntityUtils;
+import java.net.URI;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 public class LeanKitAccess {
 
-    
     Configuration config = null;
     String reqType = null;
     String reqUrl = null;
     HttpEntity reqEnt = null;
     ArrayList<BasicNameValuePair> reqHdrs = new ArrayList<>();
-    ArrayList<BasicNameValuePair> reqParams = new ArrayList<>();
+    ArrayList<NameValuePair> reqParams = new ArrayList<>();
     Board[] boards = null;
     PoolingHttpClientConnectionManager cm = null;
     Integer debugPrint = 0;
@@ -58,12 +59,12 @@ public class LeanKitAccess {
         cm = cmp;
         // Check URL has a trailing '/'
         if (config.url.endsWith("/")) {
-            config.url = config.url.substring(0, config.url.length()-1);
+            config.url = config.url.substring(0, config.url.length() - 1);
         }
-        //We need to set to https later on
-        if (config.url.startsWith("https://")){
+        // We need to set to https later on
+        if (config.url.startsWith("https://")) {
             config.url = config.url.substring(8);
-        } else if (config.url.startsWith("http://")){
+        } else if (config.url.startsWith("http://")) {
             dpf(Debug.WARN, "http access to leankit not supported. Switching to https");
             config.url = config.url.substring(7);
         }
@@ -92,7 +93,7 @@ public class LeanKitAccess {
             }
         }
         if (level <= debugPrint) {
-            System.out.printf(lp+fmt, parms);
+            System.out.printf(lp + fmt, parms);
         }
     }
 
@@ -231,9 +232,9 @@ public class LeanKitAccess {
     private String processRequest() {
 
         // Deal with delays, retries and timeouts
-        HttpClientBuilder cbldr =HttpClients.custom().setConnectionManager(cm);
+        HttpClientBuilder cbldr = HttpClients.custom().setConnectionManager(cm);
         RequestConfig.Builder configBuilder = RequestConfig.custom();
-        configBuilder.setSocketTimeout(40000);  //Set all timeouts to 40sec.
+        configBuilder.setSocketTimeout(40000); // Set all timeouts to 40sec.
         configBuilder.setConnectTimeout(40000);
         configBuilder.setConnectionRequestTimeout(40000);
         cbldr.setDefaultRequestConfig(configBuilder.build());
@@ -275,11 +276,8 @@ public class LeanKitAccess {
                 request.addHeader(reqHdrs.get(i).getName(), reqHdrs.get(i).getValue());
             }
             URIBuilder bldr = new URIBuilder();
-            bldr.setHost(config.url).setPath(reqUrl).setScheme("https");
-            for (int i = 0; i < reqParams.size(); i++) {
-                bldr.setParameter(reqParams.get(i).getName(), reqParams.get(i).getValue());
-            }
-            request.setURI(bldr.build());
+            bldr.setParameters(reqParams);
+            request.setURI(new URI("https://" + config.url + "/"+ reqUrl + bldr.toString()));
             dpf(Debug.VERBOSE, "%s\n", request.toString());
             httpResponse = client.execute(request);
             dpf(Debug.VERBOSE, "%s\n", httpResponse.toString());
@@ -318,7 +316,8 @@ public class LeanKitAccess {
                     break;
                 }
                 case 422: { // Unprocessable Parameter
-                    dpf(Debug.WARN, "Parameter Error in request: %s (%s)\n", request.toString(), httpResponse.toString());
+                    dpf(Debug.WARN, "Parameter Error in request: %s (%s)\n", request.toString(),
+                            httpResponse.toString());
                     return null;
                 }
                 case 404: { // Item not found
@@ -326,8 +325,10 @@ public class LeanKitAccess {
                     return null;
                 }
                 case 500: // Server fault
+                case 502: // Bad Gateway
                 case 503: { // Service unavailable
-                    dpf(Debug.ERROR, "Received %d status. retrying in 5 seconds\n", httpResponse.getStatusLine().getStatusCode());
+                    dpf(Debug.ERROR, "Received %d status. retrying in 5 seconds\n",
+                            httpResponse.getStatusLine().getStatusCode());
                     try {
                         EntityUtils.consumeQuietly(httpResponse.getEntity());
                         Thread.sleep(5000);
@@ -343,7 +344,8 @@ public class LeanKitAccess {
                 }
             }
             if (!entityTaken) {
-                EntityUtils.consumeQuietly(httpResponse.getEntity());   //Tidy up because the java library has a 'feature'
+                EntityUtils.consumeQuietly(httpResponse.getEntity()); // Tidy up because the java library has a
+                                                                      // 'feature'
             }
         } catch (IOException e) {
             dpf(Debug.ERROR, "(L3) %s\n", e.getMessage());
@@ -388,7 +390,7 @@ public class LeanKitAccess {
         reqHdrs.clear();
         reqType = "GET";
         reqUrl = "io/board";
-        reqParams.add(new BasicNameValuePair("search",name));
+        reqParams.add(new BasicNameValuePair("search", name));
 
         // Once you get the boards, you could cache them. There may be loads, but
         // shouldn't max
@@ -436,11 +438,11 @@ public class LeanKitAccess {
     }
 
     public Board fetchBoardFromId(String id) {
-        reqType ="GET";
+        reqType = "GET";
         reqParams.clear();
         reqHdrs.clear();
         reqUrl = "io/board/" + id;
-        reqParams.add(new BasicNameValuePair("returnFullRecord","true"));
+        reqParams.add(new BasicNameValuePair("returnFullRecord", "true"));
 
         ArrayList<Board> results = read(Board.class);
         if (results != null) {
@@ -453,19 +455,21 @@ public class LeanKitAccess {
 
         ArrayList<Board> brd = fetchBoardsFromName(name);
         Board bd = null;
-        if (brd.size() > 0) {
-            // We found one or more with this name search. First try to find an exact match
-            Iterator<Board> bItor = brd.iterator();
-            while (bItor.hasNext()) {
-                Board b = bItor.next();
-                if (b.title.equals(name)) {
-                    bd = b;
+        if (brd != null) {
+            if (brd.size() > 0) {
+                // We found one or more with this name search. First try to find an exact match
+                Iterator<Board> bItor = brd.iterator();
+                while (bItor.hasNext()) {
+                    Board b = bItor.next();
+                    if (b.title.equals(name)) {
+                        bd = b;
+                    }
                 }
+                // Then take the first if that fails
+                if (bd == null)
+                    bd = brd.get(0);
+                return fetchBoardFromId(bd.id);
             }
-            // Then take the first if that fails
-            if (bd == null)
-                bd = brd.get(0);
-            return fetchBoardFromId(bd.id);
         }
         return null;
     }
@@ -475,7 +479,7 @@ public class LeanKitAccess {
         reqType = "GET";
         reqParams.clear();
         reqHdrs.clear();
-        reqParams.add(new BasicNameValuePair("search",emailAddress));
+        reqParams.add(new BasicNameValuePair("search", emailAddress));
 
         ArrayList<User> userd = read(User.class);
         User user = null;
@@ -536,7 +540,7 @@ public class LeanKitAccess {
         reqUrl = "/io/card/" + id;
         reqParams.clear();
         reqHdrs.clear();
-        reqParams.add(new BasicNameValuePair("returnFullRecord","true"));
+        reqParams.add(new BasicNameValuePair("returnFullRecord", "true"));
         return execute(Card.class);
     }
 
@@ -545,7 +549,7 @@ public class LeanKitAccess {
         reqUrl = "/io/user/" + id;
         reqParams.clear();
         reqHdrs.clear();
-        reqParams.add(new BasicNameValuePair("returnFullRecord","true"));
+        reqParams.add(new BasicNameValuePair("returnFullRecord", "true"));
         return execute(User.class);
     }
 
@@ -777,7 +781,7 @@ public class LeanKitAccess {
     public Card createCard(String boardId, JSONObject jItem) {
         reqType = "POST";
         reqUrl = "io/card/";
-        reqParams.add(new BasicNameValuePair("returnFullRecord","true"));
+        reqParams.add(new BasicNameValuePair("returnFullRecord", "true"));
         jItem.put("boardId", boardId);
 
         if (!jItem.has("title")) {
@@ -790,7 +794,7 @@ public class LeanKitAccess {
     public Id createCardID(String boardId) {
         JSONObject jItem = new JSONObject();
         reqType = "POST";
-        reqParams.add(new BasicNameValuePair("returnFullRecord","true"));
+        reqParams.add(new BasicNameValuePair("returnFullRecord", "true"));
         reqUrl = "io/card/";
         jItem.put("boardId", boardId);
         reqEnt = new StringEntity(jItem.toString(), "UTF-8");
