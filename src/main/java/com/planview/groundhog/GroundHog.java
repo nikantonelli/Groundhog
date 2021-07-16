@@ -667,6 +667,10 @@ public class GroundHog {
                 lp = "DEBUG: ";
                 break;
             }
+            case 4: {
+                lp = "VERBOSE: ";
+                break;
+            }
         }
         if (level <= debugPrint) {
             System.out.printf(lp+fmt, parms);

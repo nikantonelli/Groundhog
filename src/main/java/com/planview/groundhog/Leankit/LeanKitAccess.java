@@ -75,20 +75,24 @@ public class LeanKitAccess {
     private void dpf(Integer level, String fmt, Object... parms) {
         String lp = null;
         switch (level) {
-            case 1: {
-                lp = "ERROR: ";
+            case 0: {
+                lp = "INFO: ";
                 break;
             }
-            case 3: {
-                lp = "DEBUG: ";
+            case 1: {
+                lp = "ERROR: ";
                 break;
             }
             case 2: {
                 lp = "WARN: ";
                 break;
             }
-            default: {
-                lp = "INFO: ";
+            case 3: {
+                lp = "DEBUG: ";
+                break;
+            }
+            case 4: {
+                lp = "VERBOSE: ";
                 break;
             }
         }
@@ -299,6 +303,14 @@ public class LeanKitAccess {
                     dpf(Debug.ERROR, "Bad request: %s\n", request.toString());
                     break;
                 }
+                case 401: {
+                    dpf(Debug.ERROR, "Unauthorised. Check Credentials in spreadsheet: %s\n", request.toString());
+                    break;
+                }
+                case 403: {
+                    dpf(Debug.ERROR, "Forbidden by server: %s\n", request.toString());
+                    break;
+                }
                 case 429: { // Flow control
                     LocalDateTime retryAfter = LocalDateTime.parse(httpResponse.getHeaders("retry-after")[0].getValue(),
                             DateTimeFormatter.RFC_1123_DATE_TIME);
@@ -318,15 +330,18 @@ public class LeanKitAccess {
                 case 422: { // Unprocessable Parameter
                     dpf(Debug.WARN, "Parameter Error in request: %s (%s)\n", request.toString(),
                             httpResponse.toString());
-                    return null;
+                    break;
                 }
                 case 404: { // Item not found
                     dpf(Debug.WARN, "Item not found: %s\n", httpResponse.toString());
-                    return null;
+                    break;
                 }
+                case 408: //Request timeout - try your luck with another one....
                 case 500: // Server fault
                 case 502: // Bad Gateway
-                case 503: { // Service unavailable
+                case 503:  // Service unavailable
+                case 504:   // Gateway timeout
+                {
                     dpf(Debug.ERROR, "Received %d status. retrying in 5 seconds\n",
                             httpResponse.getStatusLine().getStatusCode());
                     try {
@@ -340,7 +355,7 @@ public class LeanKitAccess {
                 }
                 default: {
                     dpf(Debug.ERROR, "Network fault: %s\n", httpResponse.toString());
-                    return null;
+                    break;
                 }
             }
             if (!entityTaken) {
