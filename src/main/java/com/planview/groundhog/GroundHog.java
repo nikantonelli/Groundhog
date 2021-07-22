@@ -59,7 +59,9 @@ public class GroundHog {
     static Boolean useCron = false;
     static String statusFile = "";
     static String moveLane = null;
+    static Boolean flagMove = false;
     static String deleteItems = "";
+    static Integer flagDelete = -1;
     static Integer updatePeriod = 60 * 60 * 24;
     static Boolean useUpdatePeriod = false;
     static Integer startDay = -1;
@@ -159,29 +161,33 @@ public class GroundHog {
                 // Now check we have the correct 'day' field as the file may have already
                 // existed
                 Integer fDay = null;
-                if (settings.has("day")) {
+                if (settings.has("day") && settings.has("flagDelete") && settings.has("flagMove")) {
                     fDay = settings.getInt("day");
                     if ((fDay == null) || (fDay < 0) || (fDay >= hog.getRefresh())) {
                         setUpStatusFile(statusFs); // Summat wrong, so try to re-initialise
                         fis.close();
                         fis = new BufferedReader(new FileReader(statusFs));
                         settings = new JSONObject(fis.readLine());
-                        fDay = settings.getInt("day");
                     }
-
                 } else {
                     // Once again,file must be corrupted, so try again
                     setUpStatusFile(statusFs); // Summat wrong, so try to re-initialise
                     fis.close();
                     fis = new BufferedReader(new FileReader(statusFs));
                     settings = new JSONObject(fis.readLine());
-                    fDay = settings.getInt("day");
                 }
+
+                fDay = settings.getInt("day");
+                flagDelete = settings.getInt("flagDelete");
+                flagMove = settings.getBoolean("flagMove");
+
                 fis.close();
                 hog.activity(fDay++);
                 // Reset file after the time period has expired
                 fDay = checkWhatsNext(fDay, hog);
                 settings.put("day", fDay);
+                settings.put("flagDelete", flagDelete);
+                settings.put("flagMove", flagMove);
                 FileWriter fos = new FileWriter(statusFs);
                 settings.write(fos);
                 fos.flush();
@@ -189,7 +195,7 @@ public class GroundHog {
 
             } catch (IOException e) {
                 dpf(Debug.ERROR, "(1): %s", e.getMessage()); // Any other error, we barf.
-                System.exit(1);
+                System.exit(-2);
             }
 
         }
@@ -199,17 +205,21 @@ public class GroundHog {
     private static Integer checkWhatsNext(Integer day, GroundHog hog) {
         if (day >= hog.getRefresh()) {
             if (deleteItems.equalsIgnoreCase("cycle")) {
-                hog.deleteUserItems(day);
-            }
+                flagDelete = day;
+            } 
             if (moveLane != null) {
-                hog.moveOurItems();
-            } // We need to reset the day to zero
+                flagMove = true;
+            } 
+            // We need to reset the day to zero
             if (cycleOnce == false) {
                 return 0;
             } else {
                 dpf(Debug.ERROR, "Completed cycle once as requested");
-                System.exit(1);
+                System.exit(3);
             }
+        }
+        else if (deleteItems.equalsIgnoreCase("day")) {
+            flagDelete = 0;
         }
         return day;
     }
@@ -221,12 +231,14 @@ public class GroundHog {
         try {
             FileWriter fos = new FileWriter(statusFs);
             settings.put("day", 0);
+            settings.put("flagDelete", -1);
+            settings.put("flagMove", false);
             settings.write(fos);
             fos.flush();
             fos.close();
         } catch (IOException e) {
             dpf(Debug.ERROR, "(2): %s", e.getMessage());
-            System.exit(1);
+            System.exit(4);
         }
     }
 
@@ -270,7 +282,7 @@ public class GroundHog {
         } catch (ParseException e) {
             dpf(Debug.ERROR, "(3): %s", e.getMessage());
             hf.printHelp(" ", opts);
-            System.exit(1);
+            System.exit(5);
         }
 
         xlsxfn = cl.getOptionValue("filename");
@@ -325,7 +337,7 @@ public class GroundHog {
         } catch (FileNotFoundException e) {
             dpf(Debug.ERROR, "(4) %s", e.getMessage());
 
-            System.exit(1);
+            System.exit(6);
 
         }
         try {
@@ -333,7 +345,7 @@ public class GroundHog {
             xlsxfis.close();
         } catch (IOException e) {
             dpf(Debug.ERROR, "(5) %s", e.getMessage());
-            System.exit(1);
+            System.exit(7);
         }
 
         // These two should come first in the file and must be present
@@ -346,7 +358,7 @@ public class GroundHog {
         if ((shtCount < 3) || (configSht == null) || (changesSht == null)) {
             dpf(Debug.ERROR, "%s",
                     "Did not detect correct sheets in the spreadsheet: \"Config\",\"Changes\" and one, or more, board(s)");
-            System.exit(1);
+            System.exit(8);
         }
 
         // Grab the rest of the sheets that describe boards
@@ -385,7 +397,7 @@ public class GroundHog {
         Iterator<Row> ri = configSht.iterator();
         if (!ri.hasNext()) {
             dpf(Debug.ERROR, "%s", "Did not detect any header info on Config sheet (first row!)");
-            System.exit(1);
+            System.exit(9);
         }
         Row hdr = ri.next();
         Iterator<Cell> cptr = hdr.cellIterator();
@@ -401,13 +413,13 @@ public class GroundHog {
 
         if (fieldMap.size() != cols.size()) {
             dpf(Debug.ERROR, "%s", "Did not detect correct columns on Config sheet: " + cols.toString());
-            System.exit(1);
+            System.exit(10);
         }
 
         if (!ri.hasNext()) {
             dpf(Debug.ERROR, "%s",
                     "Did not detect any field info on Config sheet (first cell must be non-blank, e.g. url to a real host)");
-            System.exit(1);
+            System.exit(11);
         }
         // Now we know which columns contain the data, scan down the sheet looking for a
         // row with data in the 'url' cell
@@ -445,7 +457,7 @@ public class GroundHog {
 
                     } catch (IllegalArgumentException | IllegalAccessException e) {
                         dpf(Debug.ERROR, "(6) %s", e.getMessage());
-                        System.exit(1);
+                        System.exit(12);
                     }
 
                 }
@@ -463,7 +475,7 @@ public class GroundHog {
 
         if ((config.apikey == null) && ((config.username == null) || (config.password == null))) {
             dpf(Debug.ERROR, "%s", "Did not detect enough user info: apikey or username/password pair");
-            System.exit(1);
+            System.exit(13);
         }
         if ((config.cyclelength != null) && (config.cyclelength.intValue() != 0)) {
             refreshPeriod = config.cyclelength.intValue();
@@ -591,7 +603,7 @@ public class GroundHog {
         }
         // Should now have a list of cards that are not ours
         lka.deleteCards(leftOvers);
-        dpf(Debug.ERROR, "Deleted %d %s\n", leftOvers.size(), (leftOvers.size() != 1) ? "cards" : "card");
+        dpf(Debug.DEBUG, "Deleted %d %s\n", leftOvers.size(), (leftOvers.size() != 1) ? "cards" : "card");
     }
 
     private void moveOurItems() {
@@ -637,7 +649,7 @@ public class GroundHog {
             Id id = updateCard(lka, brd, card, fld);
             if (id == null) {
                 dpf(Debug.DEBUG, "Could not move card %s, on board \"%s\" to lane \"%s\"\n", cardId, bName, moveLane);
-                System.exit(1);
+                System.exit(14);
             } else {
                 dpf(Debug.DEBUG, "Moved card %s, on board \"%s\" to lane \"%s\"\n", cardId, bName, moveLane);
             }
@@ -693,7 +705,7 @@ public class GroundHog {
                 || (value1Col == null)) {
             dpf(Debug.ERROR, "Could not find all required columns in %s sheet: \"Day Delta\", \"Item Sheet\", \"Item Row\", \"Action\", \"Field\", \"Value\"\n",
                     changesSht.getSheetName());
-            System.exit(1);
+            System.exit(15);
         }
         // Nw add the rows of today to an array
         row.next(); // Skip first row with headers
@@ -707,8 +719,13 @@ public class GroundHog {
             }
         }
 
-        if (deleteItems.equalsIgnoreCase("day")) {
-            deleteUserItems(0);
+        if (flagDelete >= 0) {
+            deleteUserItems(flagDelete);
+        }
+
+        if (flagMove == true) {
+            moveOurItems();
+            flagMove = false;
         }
 
         if (todaysChanges.size() == 0) {
@@ -923,7 +940,7 @@ public class GroundHog {
                                                   // the way
             if (card == null) {
                 dpf(Debug.ERROR, "Could not create card on board \"%s\" with details: \"%s\"", boardNumber, flds.toString());
-                System.exit(1);
+                System.exit(16);
             }
             return card.id;
 
@@ -944,7 +961,7 @@ public class GroundHog {
             Id id = updateCard(lka, brd, card, fld);
             if (id == null) {
                 dpf(Debug.ERROR, "Could not modify card \"%s\" on board %s with details: %s", card.id, boardNumber, fld.toString());
-                System.exit(1);
+                System.exit(17);
             }
             return id.id;
         }

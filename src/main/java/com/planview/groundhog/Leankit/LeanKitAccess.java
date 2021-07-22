@@ -199,7 +199,7 @@ public class LeanKitAccess {
                     }
                     default: {
                         dpf(Debug.ERROR, "oops! don't recognise requested item type\n");
-                        System.exit(1);
+                        System.exit(2);
                     }
                 }
                 return items;
@@ -364,7 +364,7 @@ public class LeanKitAccess {
             }
         } catch (IOException e) {
             dpf(Debug.ERROR, "(L3) %s\n", e.getMessage());
-            System.exit(1);
+            System.exit(3);
         } catch (URISyntaxException e1) {
             // Should never happen, but to keep the compiler happy.....
             e1.printStackTrace();
