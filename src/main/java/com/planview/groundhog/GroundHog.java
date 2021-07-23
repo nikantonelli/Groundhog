@@ -182,6 +182,9 @@ public class GroundHog {
                 fDay = settings.getInt("day");
                 flagDelete = settings.getInt(FLAGDELETE);
                 flagMove = settings.getString(FLAGMOVE);
+                if (flagMove.length() > 0) {
+                    moveLane = flagMove;
+                }
 
                 fis.close();
                 hog.activity(fDay++);

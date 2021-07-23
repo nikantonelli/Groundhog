@@ -1,1 +1,0 @@
-{"flagMove":false,"flagDelete":-1,"day":0}
