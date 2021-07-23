@@ -223,7 +223,7 @@ public class GroundHog {
                 System.exit(0);
             }
         }
-        else if (deleteItems.equalsIgnoreCase("day")) {
+        if (deleteItems.equalsIgnoreCase("day")) {
             flagDelete = 0;
         }
         return day;
@@ -726,7 +726,7 @@ public class GroundHog {
 
         if (flagDelete >= 0) {
             deleteUserItems(flagDelete);
-            flagDelete = -2;
+            flagDelete = -1;
         }
 
         if (flagMove.length() != 0) {
