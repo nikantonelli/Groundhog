@@ -216,13 +216,14 @@ public class GroundHog {
                 flagMove = moveLane;
             } 
             // We need to reset the day to zero
-            if (cycleOnce == false) {
-                return 0;
-            } else {
-                dpf(Debug.ERROR, "Completed cycle once as requested");
+            if (cycleOnce == true) {
+                dpf(Debug.DEBUG, "Completed cycle once as requested");
                 System.exit(0);
             }
-        }
+            else {
+                day = 0;
+            }
+        }     
         if (deleteItems.equalsIgnoreCase("day")) {
             flagDelete = 0;
         }
@@ -726,7 +727,7 @@ public class GroundHog {
 
         if (flagDelete >= 0) {
             deleteUserItems(flagDelete);
-            flagDelete = -1;
+            flagDelete = -2;
         }
 
         if (flagMove.length() != 0) {
