@@ -234,7 +234,7 @@ public class GroundHog {
             FileWriter fos = new FileWriter(statusFs);
             settings.put("day", 0);
             settings.put(FLAGDELETE, -1);
-            settings.put(FLAGMOVE, false);
+            settings.put(FLAGMOVE, "");
             settings.write(fos);
             fos.flush();
             fos.close();
