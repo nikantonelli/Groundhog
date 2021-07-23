@@ -64,6 +64,10 @@ move all cards to this lane at end of cycle. This also clears out the ID field i
               DO NOT move cards to a lane that has a WIP limit as that doesn't make any sense here.
               If you try to, the program will put in a wipOverrideComment of
               "Archiving boards from GroundHog cycle" for you.
+              When running in 'cron' mode, this flag must be present on the run that is being done
+              on the last day of the cycle. I.e. in a 14 day sprint cyle, this must be present on the command
+              that runs on day 14 (and executes the group of changes marked as 13). If you run a crom job with 
+              this flag set on day 12, then it will be ignored at the end of the 14 day cycle.
 
 -x \<level\>
 
