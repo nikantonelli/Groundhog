@@ -48,6 +48,8 @@ import org.json.JSONObject;
 public class GroundHog {
 
     private static final String OUR_GROUNDHOG_TAG = "groundhog2-generated";
+    private static final String FLAGDELETE = "flagDelete";
+    private static final String FLAGMOVE = "flagMove";
 
     static Integer debugPrint = -1;
 
@@ -59,7 +61,7 @@ public class GroundHog {
     static Boolean useCron = false;
     static String statusFile = "";
     static String moveLane = null;
-    static Boolean flagMove = false;
+    static String flagMove = "";
     static String deleteItems = "";
     static Integer flagDelete = -1;
     static Integer updatePeriod = 60 * 60 * 24;
@@ -161,7 +163,7 @@ public class GroundHog {
                 // Now check we have the correct 'day' field as the file may have already
                 // existed
                 Integer fDay = null;
-                if (settings.has("day") && settings.has("flagDelete") && settings.has("flagMove")) {
+                if (settings.has("day") && settings.has(FLAGDELETE) && settings.has(FLAGMOVE)) {
                     fDay = settings.getInt("day");
                     if ((fDay == null) || (fDay < 0) || (fDay >= hog.getRefresh())) {
                         setUpStatusFile(statusFs); // Summat wrong, so try to re-initialise
@@ -178,16 +180,16 @@ public class GroundHog {
                 }
 
                 fDay = settings.getInt("day");
-                flagDelete = settings.getInt("flagDelete");
-                flagMove = settings.getBoolean("flagMove");
+                flagDelete = settings.getInt(FLAGDELETE);
+                flagMove = settings.getString(FLAGMOVE);
 
                 fis.close();
                 hog.activity(fDay++);
                 // Reset file after the time period has expired
                 fDay = checkWhatsNext(fDay, hog);
                 settings.put("day", fDay);
-                settings.put("flagDelete", flagDelete);
-                settings.put("flagMove", flagMove);
+                settings.put(FLAGDELETE, flagDelete);
+                settings.put(FLAGMOVE, flagMove);
                 FileWriter fos = new FileWriter(statusFs);
                 settings.write(fos);
                 fos.flush();
@@ -208,14 +210,14 @@ public class GroundHog {
                 flagDelete = day;
             } 
             if (moveLane != null) {
-                flagMove = true;
+                flagMove = moveLane;
             } 
             // We need to reset the day to zero
             if (cycleOnce == false) {
                 return 0;
             } else {
                 dpf(Debug.ERROR, "Completed cycle once as requested");
-                System.exit(3);
+                System.exit(0);
             }
         }
         else if (deleteItems.equalsIgnoreCase("day")) {
@@ -231,8 +233,8 @@ public class GroundHog {
         try {
             FileWriter fos = new FileWriter(statusFs);
             settings.put("day", 0);
-            settings.put("flagDelete", -1);
-            settings.put("flagMove", false);
+            settings.put(FLAGDELETE, -1);
+            settings.put(FLAGMOVE, false);
             settings.write(fos);
             fos.flush();
             fos.close();
@@ -723,9 +725,9 @@ public class GroundHog {
             deleteUserItems(flagDelete);
         }
 
-        if (flagMove == true) {
+        if (flagMove.length() != 0) {
             moveOurItems();
-            flagMove = false;
+            flagMove = "";
         }
 
         if (todaysChanges.size() == 0) {
