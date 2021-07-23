@@ -726,6 +726,7 @@ public class GroundHog {
 
         if (flagDelete >= 0) {
             deleteUserItems(flagDelete);
+            flagDelete = -1;
         }
 
         if (flagMove.length() != 0) {
