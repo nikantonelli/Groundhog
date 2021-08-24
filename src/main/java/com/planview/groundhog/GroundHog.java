@@ -91,8 +91,8 @@ public class GroundHog {
     public static void main(String[] args) throws IOException, InterruptedException {
 
         cm = new PoolingHttpClientConnectionManager();
-        cm.setMaxTotal(10);  //Recommendation for LK is 5, but the 429 handler should keep us in check
-        
+        cm.setMaxTotal(10); // Recommendation for LK is 5, but the 429 handler should keep us in check
+
         GroundHog hog = new GroundHog();
         hog.getCommandLine(args);
         hog.parseXlsx();
@@ -211,19 +211,18 @@ public class GroundHog {
         if (day >= hog.getRefresh()) {
             if (deleteItems.equalsIgnoreCase("cycle")) {
                 flagDelete = day;
-            } 
+            }
             if (moveLane != null) {
                 flagMove = moveLane;
-            } 
+            }
             // We need to reset the day to zero
             if (cycleOnce == true) {
                 dpf(Debug.DEBUG, "Completed cycle once as requested");
                 System.exit(0);
-            }
-            else {
+            } else {
                 day = 0;
             }
-        }     
+        }
         if (deleteItems.equalsIgnoreCase("day")) {
             flagDelete = 0;
         }
@@ -276,7 +275,8 @@ public class GroundHog {
         moveCycle.setRequired(false);
         opts.addOption(moveCycle);
 
-        Option dbp = new Option("x", "debug", true, "Print out loads of helpful stuff: 0 - Info, 1 - And Errors, 2 - And Warnings, 3 - And Debugging, 4 - Verbose");
+        Option dbp = new Option("x", "debug", true,
+                "Print out loads of helpful stuff: 0 - Info, 1 - And Errors, 2 - And Warnings, 3 - And Debugging, 4 - Verbose");
         dbp.setRequired(false);
         opts.addOption(dbp);
 
@@ -324,8 +324,7 @@ public class GroundHog {
             String optVal = cl.getOptionValue("debug");
             if (optVal != null) {
                 debugPrint = Integer.parseInt(optVal);
-            }
-            else {
+            } else {
                 debugPrint = 99;
             }
         }
@@ -639,25 +638,24 @@ public class GroundHog {
             Card card = lka.fetchCard(cardId);
             if (brd == null) {
                 dpf(Debug.ERROR, "Could not locate board \"%s\"\n", bName);
-                return;
-            }
-
-            if (card == null) {
-                dpf(Debug.ERROR, "Could not locate card \"%s\"\n", cardId);
-                break;
-            }
-
-            JSONObject fld = new JSONObject();
-            JSONObject vals = new JSONObject();
-            vals.put("value1", moveLane); // Lower levels check for the correct lane name.
-            vals.put("value2", "Archiving boards from GroundHog cycle");
-            fld.put("Lane", vals);
-            Id id = updateCard(lka, brd, card, fld);
-            if (id == null) {
-                dpf(Debug.DEBUG, "Could not move card %s, on board \"%s\" to lane \"%s\"\n", cardId, bName, moveLane);
-                System.exit(14);
             } else {
-                dpf(Debug.DEBUG, "Moved card %s, on board \"%s\" to lane \"%s\"\n", cardId, bName, moveLane);
+                if (card == null) {
+                    dpf(Debug.ERROR, "Could not locate card \"%s\"\n", cardId);
+                } else {
+
+                    JSONObject fld = new JSONObject();
+                    JSONObject vals = new JSONObject();
+                    vals.put("value1", moveLane); // Lower levels check for the correct lane name.
+                    vals.put("value2", "Archiving boards from GroundHog cycle");
+                    fld.put("Lane", vals);
+                    Id id = updateCard(lka, brd, card, fld);
+                    if (id == null) {
+                        dpf(Debug.DEBUG, "Could not move card %s, on board \"%s\" to lane \"%s\"\n", cardId, bName,
+                                moveLane);
+                    } else {
+                        dpf(Debug.DEBUG, "Moved card %s, on board \"%s\" to lane \"%s\"\n", cardId, bName, moveLane);
+                    }
+                }
             }
             // Now that the item is moved, delete the ID from the item row so we can create
             // new ones the next time around
@@ -691,7 +689,7 @@ public class GroundHog {
             }
         }
         if (level <= debugPrint) {
-            System.out.printf(lp+fmt, parms);
+            System.out.printf(lp + fmt, parms);
         }
     }
 
@@ -709,7 +707,8 @@ public class GroundHog {
 
         if ((dayCol == null) || (itemShtCol == null) || (rowCol == null) || (actionCol == null) || (fieldCol == null)
                 || (value1Col == null)) {
-            dpf(Debug.ERROR, "Could not find all required columns in %s sheet: \"Day Delta\", \"Item Sheet\", \"Item Row\", \"Action\", \"Field\", \"Value\"\n",
+            dpf(Debug.ERROR,
+                    "Could not find all required columns in %s sheet: \"Day Delta\", \"Item Sheet\", \"Item Row\", \"Action\", \"Field\", \"Value\"\n",
                     changesSht.getSheetName());
             System.exit(15);
         }
@@ -779,13 +778,15 @@ public class GroundHog {
             // Check title is present for a Create
             if ((change.getCell(actionCol).getStringCellValue().equalsIgnoreCase("Create"))
                     && ((item.getCell(titleCol) == null) || (item.getCell(titleCol).getStringCellValue().isEmpty()))) {
-                dpf(Debug.WARN, "Required \"title\" column/data missing in sheet \"%s\", row: %d for a Create - skipping\n",
+                dpf(Debug.WARN,
+                        "Required \"title\" column/data missing in sheet \"%s\", row: %d for a Create - skipping\n",
                         iSht.getSheetName(), item.getRowNum());
                 continue;
             }
 
             if ((typeCol == null) || (item.getCell(typeCol) == null)) {
-                dpf(Debug.WARN, "Cannot locate \"Type\" column on row:  %d  - using default for board\n", item.getRowNum());
+                dpf(Debug.WARN, "Cannot locate \"Type\" column on row:  %d  - using default for board\n",
+                        item.getRowNum());
             }
 
             // If unset, it has a null value for the Leankit ID
@@ -800,7 +801,8 @@ public class GroundHog {
             } else {
                 // Check if this is a 'create' operation. If it is, ignore and continue past.
                 if (change.getCell(actionCol).getStringCellValue().equalsIgnoreCase("Create")) {
-                    dpf(Debug.WARN, "Ignoring action \"%s\" on item \"%s\" (attempting create on existing ID in %s row: %d)\n",
+                    dpf(Debug.WARN,
+                            "Ignoring action \"%s\" on item \"%s\" (attempting create on existing ID in %s row: %d)\n",
                             change.getCell(actionCol).getStringCellValue(), item.getCell(titleCol).getStringCellValue(),
                             iSht.getSheetName(), item.getRowNum());
                     continue; // Break out and try next change
@@ -946,7 +948,8 @@ public class GroundHog {
             Id card = createCard(lka, brd, flds); // Change from human readable to API fields on
                                                   // the way
             if (card == null) {
-                dpf(Debug.ERROR, "Could not create card on board \"%s\" with details: \"%s\"", boardNumber, flds.toString());
+                dpf(Debug.ERROR, "Could not create card on board \"%s\" with details: \"%s\"", boardNumber,
+                        flds.toString());
                 System.exit(16);
             }
             return card.id;
@@ -956,22 +959,23 @@ public class GroundHog {
             Card card = lka.fetchCard(item.getCell(idCol).getStringCellValue());
 
             if (card == null) {
-                dpf(Debug.ERROR, "Could not locate card \"%s\" on board \"%s\"\n", item.getCell(idCol).getStringCellValue(),
-                        boardNumber);
+                dpf(Debug.ERROR, "Could not locate card \"%s\" on board \"%s\"\n",
+                        item.getCell(idCol).getStringCellValue(), boardNumber);
             } else {
-            JSONObject fld = new JSONObject();
-            JSONObject vals = new JSONObject();
+                JSONObject fld = new JSONObject();
+                JSONObject vals = new JSONObject();
 
-            vals.put("value1", convertCells(change, value1Col));
+                vals.put("value1", convertCells(change, value1Col));
 
-            fld.put(change.getCell(fieldCol).getStringCellValue(), vals);
-            Id id = updateCard(lka, brd, card, fld);
-            if (id == null) {
-                dpf(Debug.ERROR, "Could not modify card \"%s\" on board %s with details: %s", card.id, boardNumber, fld.toString());
-                System.exit(17);
+                fld.put(change.getCell(fieldCol).getStringCellValue(), vals);
+                Id id = updateCard(lka, brd, card, fld);
+                if (id == null) {
+                    dpf(Debug.ERROR, "Could not modify card \"%s\" on board %s with details: %s", card.id, boardNumber,
+                            fld.toString());
+                    System.exit(17);
+                }
+                return id.id;
             }
-            return id.id;
-        }
         }
         // Unknown option comes here
         return null;
@@ -1189,7 +1193,8 @@ public class GroundHog {
                             result.put("value2", ((JSONObject) fieldLst.get(fldName)).get("value1"));
                             finalUpdates.put("CustomField", result);
                         } else {
-                            dpf(Debug.WARN, "Incorrect field name \"%s\" provided for update on card %s\n", fldName, card.id);
+                            dpf(Debug.WARN, "Incorrect field name \"%s\" provided for update on card %s\n", fldName,
+                                    card.id);
                             return null;
                         }
                     }
