@@ -8,8 +8,8 @@
     <packaging>jar</packaging>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.source>16</maven.compiler.source>
-        <maven.compiler.target>16</maven.compiler.target>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
     </properties>
     <dependencies>
         <dependency>
@@ -78,8 +78,8 @@
                 <configuration>
                     <verbose>true</verbose>
                     <fork>true</fork>
-                    <executable>C:\Program Files\Java\jdk-16.0.1\bin\javac.exe</executable>
-                    <compilerVersion>1.16</compilerVersion>
+                    <executable>C:\Program Files\Eclipse Adoptium\jdk-17.0.1.12-hotspot\bin\javac.exe</executable>
+                    <compilerVersion>1.17</compilerVersion>
                 </configuration>
             </plugin>
             <plugin>
