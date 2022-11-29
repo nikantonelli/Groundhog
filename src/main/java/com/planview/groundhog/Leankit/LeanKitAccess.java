@@ -146,6 +146,7 @@ public class LeanKitAccess {
                     // Got something to return
                     ObjectMapper om = new ObjectMapper();
                     om.configure(DeserializationFeature.USE_JAVA_ARRAY_FOR_JSON_ARRAY, true);
+					om.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
                     JSONArray p = (JSONArray) jresp.get(fieldName);
                     // Length here may be limited to 200 by the API paging.
                     if (totalReturned != p.length()) {
@@ -165,6 +166,7 @@ public class LeanKitAccess {
             } else {
                 ArrayList<T> items = new ArrayList<T>();
                 ObjectMapper om = new ObjectMapper();
+				om.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
                 switch (expectedResponseType.getSimpleName()) {
                     case "CardType": {
                         // Getting CardTypes comes here, for example.
@@ -224,6 +226,7 @@ public class LeanKitAccess {
         String result = processRequest();
         if (result != null) {
             ObjectMapper om = new ObjectMapper();
+			om.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
             try {
                 return om.readValue(result, expectedResponseType);
             } catch (JsonProcessingException e) {
