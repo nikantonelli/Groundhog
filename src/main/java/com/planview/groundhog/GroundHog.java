@@ -269,7 +269,7 @@ public class GroundHog {
         Option doOnce = new Option("o", "once", false, "Run updates from Day 0 to end only once (do not loop)");
         doOnce.setRequired(false);
         opts.addOption(doOnce);
-        Option deleteCycle = new Option("d", "delete", true, "Delete all artifacts on start of day or end of cycle");
+        Option deleteCycle = new Option("d", "delete", true, "Delete all artifacts on start of next day or restart of cycle");
         deleteCycle.setRequired(false);
         opts.addOption(deleteCycle);
 		Option deleteAll = new Option("e", "erase", false, "Erase all artifacts before anything");
