@@ -548,38 +548,36 @@ public class GroundHog {
         // For each board, get the cards and check whether we have an ID that matches a
         // row in the items
         ArrayList<String> bLst = new ArrayList<>(); // Boards we have
-        ArrayList<String> cLst = new ArrayList<>(); // Card list we have
         Iterator<Row> row = changesSht.iterator();
 
         row.next(); // Skip header
         while (row.hasNext()) {
+			
             Row change = row.next();
-
+			dpf(Debug.DEBUG, "Checking for board names (delete) in row %d\n", change.getRowNum()+1);
             // XLS Spreadsheets are horrible!
             if ((change.getCell(itemShtCol) == null) || (change.getCell(rowCol) == null)) {
+				dpf(Debug.DEBUG, "Item Sheet or Row Number missing from change sheet row %d\n",change.getRowNum()+1);
                 continue;
             }
             XSSFSheet iSht = findSheet(change.getCell(itemShtCol).getStringCellValue());
             Row item = iSht.getRow((int) (change.getCell(rowCol).getNumericCellValue() - 1));
             if (item.getCell(findColumnFromSheet(iSht, "Board Name")) == null) {
+				dpf(Debug.DEBUG, "Didn't find value in Board Name field in row %d\n", item.getRowNum()+1);
                 continue;
             }
             String boardName = (item.getCell(findColumnFromSheet(iSht, "Board Name")).getStringCellValue());
-            String cardId = "";
-            if (item.getCell(findColumnFromSheet(iSht, "ID")) != null) {
-                cardId = item.getCell(findColumnFromSheet(iSht, "ID")).getStringCellValue();
-            }
             if (!bLst.contains(boardName)) {
+				dpf(Debug.DEBUG, "Adding \"%s\" to board list\n", boardName);
                 bLst.add(boardName);
             }
 
-            if ((cardId != "") && (cardId != null) && !cLst.contains(cardId)) {
-                cLst.add(cardId);
-            }
         }
-        if ((bLst.size() == 0) || (cLst.size() == 0)) {
+        if (bLst.size() == 0) {
+			dpf(Debug.ERROR, "No boards found for delete process\n");
             return;
         }
+
         LeanKitAccess lka = new LeanKitAccess(config, debugPrint, cm);
         Iterator<String> bIter = bLst.iterator();
         ArrayList<Card> leftOvers = new ArrayList<>();
@@ -637,10 +635,10 @@ public class GroundHog {
             Board brd = lka.fetchBoard(bName);
             Card card = lka.fetchCard(cardId);
             if (brd == null) {
-                dpf(Debug.ERROR, "Could not locate board \"%s\"\n", bName);
+                dpf(Debug.ERROR, "Could not locate board \"%s\"\n", bName); //Don't need to exit as we just try the next thing
             } else {
                 if (card == null) {
-                    dpf(Debug.ERROR, "Could not locate card \"%s\"\n", cardId);
+                    dpf(Debug.ERROR, "Could not locate card \"%s\"\n", cardId); //Don't need to exit as we just try the next thing
                 } else {
 
                     JSONObject fld = new JSONObject();
@@ -712,7 +710,7 @@ public class GroundHog {
                     changesSht.getSheetName());
             System.exit(15);
         }
-        // Nw add the rows of today to an array
+        // Now add the rows of today to an array
         row.next(); // Skip first row with headers
         while (row.hasNext()) {
 
@@ -725,11 +723,13 @@ public class GroundHog {
         }
 
         if (flagDelete >= 0) {
+			dpf(Debug.DEBUG, "Checking for items to delete\n");
             deleteUserItems(flagDelete);
             flagDelete = -2;
         }
 
         if (flagMove.length() != 0) {
+			dpf(Debug.DEBUG, "Checking for items to move\n");
             moveOurItems();
             flagMove = "";
         }
@@ -1087,6 +1087,7 @@ public class GroundHog {
 
         if (searchLanes.size() == 0) {
             dpf(Debug.WARN, "Cannot find lane \"%s\"on board \"%s\"\n", name, brd.title);
+			return null;
         }
         if (searchLanes.size() > 1) {
             dpf(Debug.WARN, "Ambiguous lane name \"%s\"on board \"%s\"\n", name, brd.title);
