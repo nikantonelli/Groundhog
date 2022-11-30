@@ -59,7 +59,7 @@ public class GroundHog {
     FileInputStream xlsxfis = null;
     XSSFWorkbook wb = null;
     static Boolean useCron = false;
-    static String statusFile = "";
+    static String statusFile = "status.txt";
     static String moveLane = null;
     static String flagMove = "";
     static String deleteItems = "";
@@ -68,6 +68,8 @@ public class GroundHog {
     static Boolean useUpdatePeriod = false;
     static Integer startDay = -1;
     static Boolean cycleOnce = false;
+	static Boolean removeNow = false;
+	static Boolean removeAll = false;
     static PoolingHttpClientConnectionManager cm = null;
     /**
      * One line sheet that contains the credentials to access the Leankit Server
@@ -270,6 +272,12 @@ public class GroundHog {
         Option deleteCycle = new Option("d", "delete", true, "Delete all artifacts on start of day or end of cycle");
         deleteCycle.setRequired(false);
         opts.addOption(deleteCycle);
+		Option deleteAll = new Option("e", "erase", false, "Erase all artifacts before anything");
+        deleteAll.setRequired(false);
+        opts.addOption(deleteAll);
+		Option deleteNow = new Option("r", "remove", false, "Remove all user artifacts before anything");
+        deleteNow.setRequired(false);
+        opts.addOption(deleteNow);
 
         Option moveCycle = new Option("m", "move", true, "Move all artifacts on end of cycle to this lane");
         moveCycle.setRequired(false);
@@ -314,6 +322,14 @@ public class GroundHog {
 
         if (cl.hasOption("once")) {
             cycleOnce = true;
+        }
+
+        if (cl.hasOption("remove")) {
+            removeNow = true;
+        }
+
+        if (cl.hasOption("erase")) {
+            removeAll = true;
         }
 
         if (cl.hasOption("delete")) {
@@ -550,6 +566,7 @@ public class GroundHog {
         ArrayList<String> bLst = new ArrayList<>(); // Boards we have
         Iterator<Row> row = changesSht.iterator();
 
+		dpf(Debug.DEBUG, "Searching %d rows in Changes sheet for boards\n", changesSht.getLastRowNum());
         row.next(); // Skip header
         while (row.hasNext()) {
 			
@@ -589,13 +606,13 @@ public class GroundHog {
                 return;
             }
             dpf(Debug.DEBUG, "Requesting card IDs from board \"%s\"\n", brd.id);
-            ArrayList<Card> cards = lka.fetchCardIDsFromBoard(brd.id, rewind);
+            ArrayList<Card> cards = lka.fetchCardIDsFromBoard(brd.id, (removeAll || removeNow)? -2 : rewind);
             ArrayList<Card> removeCards = new ArrayList<>();
             if (cards != null) {
                 Iterator<Card> cIter = cards.iterator();
                 while (cIter.hasNext()) {
                     Card cd = cIter.next();
-                    if (!hasOurTag(cd)) {
+                    if (removeAll || !hasOurTag(cd)) {
                         removeCards.add(cd);
                     }
                 }
@@ -722,7 +739,7 @@ public class GroundHog {
             }
         }
 
-        if (flagDelete >= 0) {
+        if ((flagDelete >= 0) || (removeNow == true) || (removeAll == true)){
 			dpf(Debug.DEBUG, "Checking for items to delete\n");
             deleteUserItems(flagDelete);
             flagDelete = -2;
