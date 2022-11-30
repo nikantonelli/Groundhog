@@ -605,7 +605,7 @@ public class GroundHog {
                 dpf(Debug.ERROR, "Could not locate board \"%s\"\n", bName);
                 return;
             }
-            dpf(Debug.DEBUG, "Requesting card IDs from board \"%s\"\n", brd.id);
+            dpf(Debug.DEBUG, "Requesting card IDs from board \"%s\" (%s)\n", brd.id, bName);
             ArrayList<Card> cards = lka.fetchCardIDsFromBoard(brd.id, (removeAll || removeNow)? -2 : rewind);
             ArrayList<Card> removeCards = new ArrayList<>();
             if (cards != null) {
